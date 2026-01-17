@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: mimicrab-sa
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: mimicrab-role
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["mimicrab-config"]
+    verbs: ["get", "watch", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: mimicrab-rolebinding
+subjects:
+  - kind: ServiceAccount
+    name: mimicrab-sa
+roleRef:
+  kind: Role
+  name: mimicrab-role
+  apiGroup: rbac.authorization.k8s.io

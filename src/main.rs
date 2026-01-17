@@ -1,6 +1,7 @@
 mod models;
 mod matcher;
 mod templating;
+mod kubernetes;
 
 use axum::{
     extract::{Path as AxPath, Request, State},
@@ -13,9 +14,11 @@ use axum::body::Body;
 use http_body_util::BodyExt;
 use models::Expectation;
 use std::{fs, sync::Arc, convert::Infallible};
-use tokio::sync::{broadcast, RwLock};
+use tokio::sync::broadcast;
 use serde_json::{json, Value};
 use futures::stream::Stream;
+use kube::Client;
+use arc_swap::ArcSwap;
 
 #[derive(Clone, Debug, serde::Serialize)]
 struct LogEntry {
@@ -28,8 +31,11 @@ struct LogEntry {
 }
 
 struct AppState {
-    expectations: RwLock<Vec<Expectation>>,
+    expectations: Arc<ArcSwap<Vec<Expectation>>>,
     log_tx: broadcast::Sender<LogEntry>,
+    kube_client: Option<Client>,
+    config_map_name: String,
+    namespace: String,
 }
 
 #[tokio::main]
@@ -39,13 +45,46 @@ async fn main() {
         .init();
 
     let expectations_path = "expectations.json";
-    let initial_expectations = load_expectations(expectations_path);
     let (log_tx, _) = broadcast::channel(100);
     
+    // Environment Detection
+    let is_k8s = std::env::var("KUBERNETES_SERVICE_HOST").is_ok();
+    let kube_client = if is_k8s {
+        tracing::info!("Mimicrab starting in KUBERNETES mode");
+        Client::try_default().await.ok()
+    } else {
+        tracing::info!("Mimicrab starting in LOCAL mode");
+        None
+    };
+
+    let config_map_name = std::env::var("CONFIG_MAP_NAME").unwrap_or_else(|_| "mimicrab-config".to_string());
+    let namespace = std::env::var("KUBERNETES_NAMESPACE").unwrap_or_else(|_| "default".to_string());
+
+    let initial_expectations = if let Some(ref client) = kube_client {
+        kubernetes::load_from_configmap(client, &config_map_name, &namespace).await.unwrap_or_else(|_| load_expectations(expectations_path))
+    } else {
+        load_expectations(expectations_path)
+    };
+
+    let expectations = Arc::new(ArcSwap::from_pointee(initial_expectations));
+    
     let state = Arc::new(AppState {
-        expectations: RwLock::new(initial_expectations),
+        expectations: Arc::clone(&expectations),
         log_tx,
+        kube_client,
+        config_map_name,
+        namespace,
     });
+
+    if let Some(ref client) = state.kube_client {
+        let expectations_clone = Arc::clone(&expectations);
+        tokio::spawn(kubernetes::run_configmap_watcher(
+            client.clone(),
+            state.namespace.clone(),
+            state.config_map_name.clone(),
+            expectations_clone
+        ));
+    }
 
     let admin_router = Router::new()
         .route("/mocks", get(list_mocks).post(add_mock))
@@ -71,17 +110,37 @@ fn load_expectations(path: &str) -> Vec<Expectation> {
     }
 }
 
+fn save_expectations(path: &str, expectations: &[Expectation]) {
+    let content = serde_json::to_string_pretty(expectations).expect("Failed to serialize expectations");
+    fs::write(path, content).expect("Failed to write expectations file");
+    tracing::info!("Local expectations saved to {}", path);
+}
+
+
 // Admin Handlers
 async fn list_mocks(State(state): State<Arc<AppState>>) -> Json<Vec<Expectation>> {
-    Json(state.expectations.read().await.clone())
+    Json((**state.expectations.load()).clone())
 }
 
 async fn add_mock(
     State(state): State<Arc<AppState>>,
     Json(new_mock): Json<Expectation>,
 ) -> (StatusCode, Json<Expectation>) {
-    let mut mocks = state.expectations.write().await;
+    let mut mocks = (*state.expectations.load_full()).clone();
     mocks.push(new_mock.clone());
+    state.expectations.store(Arc::new(mocks.clone()));
+
+    if let Some(ref client) = state.kube_client {
+        kubernetes::sync_to_configmap(
+            client,
+            &state.namespace,
+            &state.config_map_name,
+            &mocks,
+        ).await;
+    } else {
+        save_expectations("expectations.json", &mocks);
+    }
+    
     (StatusCode::CREATED, Json(new_mock))
 }
 
@@ -90,9 +149,21 @@ async fn update_mock(
     AxPath(id): AxPath<u64>,
     Json(updated_mock): Json<Expectation>,
 ) -> StatusCode {
-    let mut mocks = state.expectations.write().await;
+    let mut mocks = (*state.expectations.load_full()).clone();
     if let Some(pos) = mocks.iter().position(|m| m.id == id) {
         mocks[pos] = updated_mock;
+        state.expectations.store(Arc::new(mocks.clone()));
+
+        if let Some(ref client) = state.kube_client {
+            kubernetes::sync_to_configmap(
+                client,
+                &state.namespace,
+                &state.config_map_name,
+                &mocks,
+            ).await;
+        } else {
+            save_expectations("expectations.json", &mocks);
+        }
         StatusCode::OK
     } else {
         StatusCode::NOT_FOUND
@@ -103,9 +174,21 @@ async fn delete_mock(
     State(state): State<Arc<AppState>>,
     AxPath(id): AxPath<u64>,
 ) -> StatusCode {
-    let mut mocks = state.expectations.write().await;
+    let mut mocks = (*state.expectations.load_full()).clone();
     if let Some(pos) = mocks.iter().position(|m| m.id == id) {
         mocks.remove(pos);
+        state.expectations.store(Arc::new(mocks.clone()));
+
+        if let Some(ref client) = state.kube_client {
+            kubernetes::sync_to_configmap(
+                client,
+                &state.namespace,
+                &state.config_map_name,
+                &mocks,
+            ).await;
+        } else {
+            save_expectations("expectations.json", &mocks);
+        }
         StatusCode::NO_CONTENT
     } else {
         StatusCode::NOT_FOUND
@@ -141,7 +224,7 @@ async fn handle_request(
 
     tracing::info!("Incoming request: {} {}", method, path);
 
-    let expectations = state.expectations.read().await;
+    let expectations = state.expectations.load();
     let matched = expectations.iter().find(|exp| {
         matcher::matches(method, path, headers, &body_json, &exp.condition)
     });
