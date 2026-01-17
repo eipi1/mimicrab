@@ -1,0 +1,63 @@
+[
+    {
+        "id": 1,
+        "condition": {
+            "method": "GET",
+            "path": "/status"
+        },
+        "response": {
+            "status_code": 200,
+            "body": {
+                "status": "ok",
+                "timestamp": "2026-01-17T16:58:00Z"
+            }
+        }
+    },
+    {
+        "id": 2,
+        "condition": {
+            "method": "POST",
+            "path": "/users",
+            "body": {
+                "name": "John Doe"
+            }
+        },
+        "response": {
+            "status_code": 201,
+            "body": {
+                "id": 123,
+                "message": "User created successfully"
+            }
+        }
+    },
+    {
+        "id": 3,
+        "condition": {
+            "method": "GET",
+            "path": "/secure",
+            "headers": {
+                "authorization": "Bearer secret-token"
+            }
+        },
+        "response": {
+            "status_code": 200,
+            "body": {
+                "data": "Confidential information"
+            }
+        }
+    },
+    {
+        "id": 4,
+        "condition": {
+            "method": "POST",
+            "path": "/echo/test"
+        },
+        "response": {
+            "status_code": 200,
+            "body": {
+                "echo_path": "{{path[1]}}",
+                "received_name": "{{body.user.name}}"
+            }
+        }
+    }
+]
