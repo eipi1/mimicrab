@@ -14,8 +14,8 @@ pub async fn load_from_configmap(client: &Client, name: &str, ns: &str) -> Resul
     let cms: Api<ConfigMap> = Api::namespaced(client.clone(), ns);
     let cm = cms.get(name).await?;
     if let Some(data) = cm.data {
-        if let Some(mocks_yaml) = data.get("mocks.yaml") {
-            return Ok(serde_yaml::from_str(mocks_yaml)?);
+        if let Some(mocks_json) = data.get("mocks.json") {
+            return Ok(serde_json::from_str(mocks_json)?);
         }
     }
     Ok(vec![])
@@ -37,10 +37,10 @@ pub async fn run_configmap_watcher(
     while let Some(cm_res) = w.next().await {
         if let Ok(cm) = cm_res {
             if let Some(data) = cm.data {
-                if let Some(mocks_yaml) = data.get("mocks.yaml") {
-                    if let Ok(new_expectations) = serde_yaml::from_str::<Vec<Expectation>>(mocks_yaml) {
+                if let Some(mocks_json) = data.get("mocks.json") {
+                    if let Ok(new_expectations) = serde_json::from_str::<Vec<Expectation>>(mocks_json) {
                         expectations.store(Arc::new(new_expectations));
-                        tracing::info!("State synchronized from ConfigMap (YAML)");
+                        tracing::info!("State synchronized from ConfigMap (JSON)");
                     }
                 }
             }
@@ -56,11 +56,11 @@ pub async fn sync_to_configmap(
     mocks: &[Expectation],
 ) {
     let cms: Api<ConfigMap> = Api::namespaced(client.clone(), namespace);
-    let mocks_yaml = serde_yaml::to_string(mocks).unwrap();
+    let mocks_json = serde_json::to_string(mocks).unwrap();
     
     let patch = json!({
         "data": {
-            "mocks.yaml": mocks_yaml
+            "mocks.json": mocks_json
         }
     });
 
