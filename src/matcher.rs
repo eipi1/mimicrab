@@ -10,19 +10,19 @@ pub fn matches(
     condition: &RequestCondition,
 ) -> bool {
     // Match method
-    if let Some(ref cond_method) = condition.method {
-        if method.as_str().to_uppercase() != cond_method.to_uppercase() {
-            tracing::trace!("Method mismatch: expected {}, got {}", cond_method, method);
-            return false;
-        }
+    if let Some(ref cond_method) = condition.method
+        && method.as_str().to_uppercase() != cond_method.to_uppercase()
+    {
+        tracing::trace!("Method mismatch: expected {}, got {}", cond_method, method);
+        return false;
     }
 
     // Match path
-    if let Some(ref cond_path) = condition.path {
-        if path != cond_path {
-            tracing::trace!("Path mismatch: expected {}, got {}", cond_path, path);
-            return false;
-        }
+    if let Some(ref cond_path) = condition.path
+        && path != cond_path
+    {
+        tracing::trace!("Path mismatch: expected {}, got {}", cond_path, path);
+        return false;
     }
 
     // Match headers

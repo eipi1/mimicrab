@@ -17,10 +17,10 @@ pub async fn load_from_configmap(
 ) -> Result<Vec<Expectation>, Box<dyn std::error::Error + Send + Sync>> {
     let cms: Api<ConfigMap> = Api::namespaced(client.clone(), ns);
     let cm = cms.get(name).await?;
-    if let Some(data) = cm.data {
-        if let Some(mocks_json) = data.get("mocks.json") {
-            return Ok(serde_json::from_str(mocks_json)?);
-        }
+    if let Some(data) = cm.data
+        && let Some(mocks_json) = data.get("mocks.json")
+    {
+        return Ok(serde_json::from_str(mocks_json)?);
     }
     Ok(vec![])
 }
@@ -43,17 +43,13 @@ pub async fn run_configmap_watcher(
     );
 
     while let Some(cm_res) = w.next().await {
-        if let Ok(cm) = cm_res {
-            if let Some(data) = cm.data {
-                if let Some(mocks_json) = data.get("mocks.json") {
-                    if let Ok(new_expectations) =
-                        serde_json::from_str::<Vec<Expectation>>(mocks_json)
-                    {
-                        expectations.store(Arc::new(new_expectations));
-                        tracing::info!("State synchronized from ConfigMap (JSON)");
-                    }
-                }
-            }
+        if let Ok(cm) = cm_res
+            && let Some(data) = cm.data
+            && let Some(mocks_json) = data.get("mocks.json")
+            && let Ok(new_expectations) = serde_json::from_str::<Vec<Expectation>>(mocks_json)
+        {
+            expectations.store(Arc::new(new_expectations));
+            tracing::info!("State synchronized from ConfigMap (JSON)");
         }
     }
     Ok(())
