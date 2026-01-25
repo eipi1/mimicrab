@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mimicrab | Mock Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+
+<body class="dark-theme">
+    <div class="app-container">
+        <aside class="sidebar">
+            <div class="logo">
+                <span class="logo-icon">🦀</span>
+                <h1>Mimicrab</h1>
+            </div>
+            <nav>
+                <button class="nav-item active" data-tab="mocks" id="nav-mocks">
+                    <span class="icon">📋</span> Mocks
+                </button>
+                <button class="nav-item" data-tab="logs" id="nav-logs">
+                    <span class="icon">📜</span> Logs
+                </button>
+                <button class="nav-item" data-tab="export-import" id="nav-export">
+                    <span class="icon">🔃</span> Export/Import
+                </button>
+            </nav>
+            <div class="sidebar-footer">
+                <p>v0.1.0</p>
+            </div>
+        </aside>
+
+        <main class="content">
+            <header class="content-header">
+                <h2 id="tab-title">Mocks</h2>
+                <div class="header-actions" id="mocks-actions">
+                    <button class="btn btn-primary" id="btn-create-mock">+ Create Mock</button>
+                </div>
+            </header>
+
+            <section id="mocks-section" class="tab-content active">
+                <div class="mock-list" id="mock-list">
+                    <!-- Mocks will be loaded here -->
+                </div>
+            </section>
+
+            <section id="logs-section" class="tab-content">
+                <div class="logs-container">
+                    <div class="logs-header">
+                        <h3>Real-time Logs</h3>
+                        <button class="btn btn-secondary btn-sm" id="btn-clear-logs">Clear</button>
+                    </div>
+                    <div class="logs-list" id="logs-list">
+                        <!-- Logs will be streamed here -->
+                    </div>
+                </div>
+            </section>
+
+            <section id="export-import-section" class="tab-content">
+                <div class="card export-card">
+                    <h3>Export Mocks</h3>
+                    <p>Download all your mock configurations as a JSON file.</p>
+                    <button class="btn btn-secondary" id="btn-export">Export to JSON</button>
+                </div>
+                <div class="card import-card">
+                    <h3>Import Mocks</h3>
+                    <p>Upload a JSON file to replace current mocks.</p>
+                    <input type="file" id="import-file" accept=".json" style="display: none;">
+                    <button class="btn btn-primary" id="btn-import-trigger">Choose File & Import</button>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Modal for Test Result -->
+    <div class="modal-overlay" id="test-modal">
+        <div class="modal-content glass">
+            <header class="modal-header">
+                <h3>Test Result</h3>
+                <button class="btn-close" id="btn-close-test-modal">&times;</button>
+            </header>
+            <div id="test-result-content" class="test-result-content">
+                <!-- Result details here -->
+            </div>
+            <footer class="modal-footer">
+                <button type="button" class="btn btn-primary" id="btn-close-test-footer">Close</button>
+            </footer>
+        </div>
+    </div>
+    <div class="modal-overlay" id="mock-modal">
+        <div class="modal-content glass">
+            <header class="modal-header">
+                <h3 id="modal-title">Create Mock</h3>
+                <button class="btn-close" id="btn-close-modal">&times;</button>
+            </header>
+            <form id="mock-form">
+                <input type="hidden" id="mock-id">
+                <div class="form-group">
+                    <label for="mock-method">Method</label>
+                    <select id="mock-method" required>
+                        <option value="GET">GET</option>
+                        <option value="POST">POST</option>
+                        <option value="PUT">PUT</option>
+                        <option value="DELETE">DELETE</option>
+                        <option value="PATCH">PATCH</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="mock-path">Path</label>
+                    <input type="text" id="mock-path" placeholder="/api/v1/resource" required>
+                </div>
+                <div class="form-group">
+                    <label for="mock-req-body">Request Body (Optional - matches only if provided)</label>
+                    <textarea id="mock-req-body" rows="3" placeholder='{"key": "value"}'></textarea>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Request Headers (Matches only if all match)</label>
+                        <div id="req-headers-container" class="headers-container">
+                            <!-- Rows added dynamically -->
+                        </div>
+                        <button type="button" class="btn btn-secondary btn-sm" id="btn-add-req-header">+ Add Req
+                            Header</button>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group half">
+                        <label for="mock-status">Response Status</label>
+                        <input type="number" id="mock-status" value="200">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Response Headers</label>
+                    <div id="headers-container" class="headers-container">
+                        <!-- Rows added dynamically -->
+                    </div>
+                    <button type="button" class="btn btn-secondary btn-sm" id="btn-add-header">+ Add Res Header</button>
+                </div>
+
+                <div class="form-group">
+                    <label for="mock-res-body">Response Body (JSON)</label>
+                    <textarea id="mock-res-body" placeholder='{ "message": "success" }' rows="5"></textarea>
+                </div>
+
+                <footer class="modal-footer">
+                    <button type="button" class="btn btn-secondary" id="btn-cancel-modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Mock</button>
+                </footer>
+            </form>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+
+</html>

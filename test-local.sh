@@ -21,7 +21,7 @@ cargo run &
 PID=$!
 
 # Wait for server to start
-MAX_RETRIES=10
+MAX_RETRIES=60
 RETRY_COUNT=0
 while ! curl -s $BASE_URL/_admin/mocks > /dev/null; do
     sleep 1
@@ -75,10 +75,21 @@ else
     exit 1
 fi
 
+# 5. Test BSON Response
+echo "Testing BSON response..."
+curl -s -D headers.txt $BASE_URL/hello -H "Accept: application/bson" -o response.bson
+if grep -qi "content-type: application/bson" headers.txt; then
+    echo -e "${GREEN}Success: Response has application/bson content-type${NC}"
+else
+    echo -e "${RED}Error: Response did not have application/bson content-type:$(cat headers.txt)${NC}"
+    kill $PID
+    exit 1
+fi
+
 # Cleanup
 echo "Cleaning up..."
 kill $PID
 wait $PID 2>/dev/null
-rm -f $MOCKS_FILE
+rm -f $MOCKS_FILE headers.txt response.bson stderr.log
 
 echo -e "${GREEN}Verification complete!${NC}"

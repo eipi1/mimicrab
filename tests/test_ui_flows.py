@@ -1,0 +1,58 @@
+import pytest
+import requests
+from playwright.sync_api import Page, expect
+
+BASE_URL = "http://localhost:3000"
+
+@pytest.fixture(autouse=True)
+def clean_mocks():
+    """Ensure mocks are cleared before each test."""
+    requests.post(f"{BASE_URL}/_admin/import", json=[])
+    yield
+
+def test_dashboard_full_flow(page: Page):
+    # 1. Open Dashboard
+    page.goto(BASE_URL)
+    expect(page.get_by_role("heading", name="Mimicrab")).to_be_visible()
+    
+    # 2. Create a Mock
+    page.get_by_role("button", name="+ Create Mock").click()
+    page.get_by_label("Method").select_option("GET")
+    page.locator("#mock-path").fill("/auto-test")
+    page.locator("#mock-status").fill("202")
+    page.locator("#mock-res-body").fill('{"auto": "ready"}')
+    
+    # Add a header
+    page.get_by_role("button", name="+ Add Header").click()
+    page.locator(".header-key").first.fill("X-Auto")
+    page.locator(".header-value").first.fill("verified")
+    
+    page.get_by_role("button", name="Save Mock").click()
+    
+    # Verify card appeared
+    expect(page.locator(".card").filter(has_text="/auto-test")).to_be_visible()
+    expect(page.locator(".card").filter(has_text="Return 202")).to_be_visible()
+
+    # 3. Use "Test" button
+    page.get_by_role("button", name="Test").first.click()
+    expect(page.locator("#test-modal")).to_be_visible()
+    expect(page.locator("#test-result-content")).to_contain_text("/auto-test")
+    page.get_by_role("button", name="Close").click()
+    expect(page.locator("#test-modal")).not_to_be_visible()
+    
+    # 4. Check Logs
+    page.get_by_role("button", name="Logs").click()
+    expect(page.locator(".log-entry").first).to_contain_text("/auto-test")
+    expect(page.locator(".log-entry").first).to_contain_text("MATCH")
+
+    # 5. Export Mocks (Just click and check no error)
+    page.get_by_role("button", name="Export/Import").click()
+    page.get_by_role("button", name="Export to JSON").click()
+
+    # 6. Delete Mock
+    page.get_by_role("button", name="Mocks").click()
+    page.once("dialog", lambda dialog: dialog.accept()) # Handle confirm delete
+    page.get_by_role("button", name="Delete").first.click()
+    
+    # Verify specific mock is gone
+    expect(page.locator(".card").filter(has_text="/auto-test")).not_to_be_visible()
