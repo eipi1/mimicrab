@@ -1,0 +1,9 @@
+.git
+target
+.idea
+venv
+.venv
+__pycache__
+*.json
+!Cargo.toml
+!Cargo.lock

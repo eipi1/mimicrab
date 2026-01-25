@@ -33,7 +33,7 @@ pub async fn run_configmap_watcher(
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let cms: Api<ConfigMap> = Api::namespaced(client, &namespace);
 
-    let wc = watcher::Config::default().fields(&format!("metadata.name={}", config_map_name));
+    let wc = watcher::Config::default().fields(&format!("metadata.name={config_map_name}"));
     let mut w = watcher(cms, wc).applied_objects().boxed();
 
     tracing::info!(

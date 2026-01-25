@@ -1,0 +1,137 @@
+name: CI
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+  release:
+    types: [ published ]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y libssl-dev pkg-config
+        
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        
+      - name: Check
+        run: cargo check
+        
+      - name: Format
+        run: cargo fmt --all -- --check
+        
+      - name: Clippy
+        run: cargo clippy -- -D warnings
+
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y libssl-dev pkg-config
+        
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        
+      - name: Run tests
+        run: cargo test
+
+  ui-test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y libssl-dev pkg-config
+        
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "rust-1.85"
+        
+      - name: Install Python dependencies
+        run: |
+          pip install -r tests/requirements-test.txt
+          playwright install chromium
+          
+      - name: Build Rust binary
+        run: cargo build
+        
+      - name: Run Mimicrab in background
+        run: |
+          ./target/debug/mimicrab &
+          echo "SERVER_PID=$!" >> $GITHUB_ENV
+          
+      - name: Wait for server
+        run: |
+          timeout 30s bash -c 'while ! curl -s http://localhost:3000/_admin/mocks > /dev/null; do sleep 1; done'
+          
+      - name: Run UI tests
+        run: pytest tests/test_ui_flows.py
+        
+      - name: Kill server
+        if: always()
+        run: kill ${{ env.SERVER_PID }} || true
+
+  docker:
+    needs: [lint, test, ui-test]
+    runs-on: ubuntu-24.04
+    # Only run on master push, release, or manual trigger
+    if: |
+      github.event_name == 'push' && github.ref == 'refs/heads/master' ||
+      github.event_name == 'release' ||
+      github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: read
+      packages: write
+      
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/master' }}
+            type=semver,pattern={{version}}
+            type=sha
+            
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
