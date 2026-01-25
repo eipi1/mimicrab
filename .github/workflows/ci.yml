@@ -20,13 +20,15 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.93.0
         with:
-          components: rustfmt
+          components: rustfmt, clippy
       
       - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install -y libssl-dev pkg-config
         
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: rust-1.93
 
       - name: Check
         run: cargo check
@@ -75,6 +77,7 @@ jobs:
         
       - name: Install test dependencies
         run: |
+          pip install -r tests/requirements-test.txt
           playwright install chromium
           
       - name: Build Rust binary
