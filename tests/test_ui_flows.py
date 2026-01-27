@@ -23,7 +23,7 @@ def test_dashboard_full_flow(page: Page):
     page.locator("#mock-res-body").fill('{"auto": "ready"}')
     
     # Add a header
-    page.get_by_role("button", name="+ Add Header").click()
+    page.get_by_role("button", name="+ Add Res Header").click()
     page.locator(".header-key").first.fill("X-Auto")
     page.locator(".header-value").first.fill("verified")
     
