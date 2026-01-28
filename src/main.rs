@@ -310,6 +310,13 @@ async fn handle_request(State(state): State<Arc<AppState>>, req: Request) -> Res
     if let Some(exp) = matched {
         tracing::info!("Matched expectation: {}", exp.id);
 
+        if let Some(latency) = exp.response.latency
+            && latency > 0
+        {
+            tracing::info!("Applying latency delay: {}ms", latency);
+            tokio::time::sleep(std::time::Duration::from_millis(latency)).await;
+        }
+
         let status =
             StatusCode::from_u16(exp.response.status_code.unwrap_or(200)).unwrap_or(StatusCode::OK);
         let mut response_builder = Response::builder().status(status);

@@ -184,3 +184,47 @@ async fn test_import_mocks() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
+
+#[tokio::test]
+async fn test_mock_latency() -> Result<(), Box<dyn std::error::Error>> {
+    let _server = TestServer::start();
+    let base_url = "http://localhost:3000";
+    wait_for_server(base_url).await;
+
+    let client = reqwest::Client::new();
+    let admin_url = format!("{}/_admin/mocks", base_url);
+
+    // Add a mock with 500ms latency
+    let latency_ms = 500;
+    let new_mock = json!({
+        "id": 777123,
+        "condition": {
+            "method": "GET",
+            "path": "/latency-test"
+        },
+        "response": {
+            "status_code": 200,
+            "body": { "delayed": true },
+            "latency": latency_ms
+        }
+    });
+
+    client.post(&admin_url).json(&new_mock).send().await?;
+
+    // Measure request duration
+    let start = std::time::Instant::now();
+    let res = client
+        .get(format!("{}/latency-test", base_url))
+        .send()
+        .await?;
+    let duration = start.elapsed();
+
+    assert_eq!(res.status(), 200);
+    assert!(
+        duration >= Duration::from_millis(latency_ms),
+        "Response was too fast: {:?}",
+        duration
+    );
+
+    Ok(())
+}

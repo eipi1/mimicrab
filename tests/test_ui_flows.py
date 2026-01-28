@@ -20,6 +20,7 @@ def test_dashboard_full_flow(page: Page):
     page.get_by_label("Method").select_option("GET")
     page.locator("#mock-path").fill("/auto-test")
     page.locator("#mock-status").fill("202")
+    page.locator("#mock-latency").fill("100")
     page.locator("#mock-res-body").fill('{"auto": "ready"}')
     
     # Add a header

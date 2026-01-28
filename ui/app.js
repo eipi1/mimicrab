@@ -108,9 +108,13 @@ async function deleteMock(id) {
 
 async function testMock(mock) {
     console.log("Testing mock:", mock);
+
+    // Show loading state immediately
+    const method = mock.condition.method;
+    const url = mock.condition.path;
+    showTestLoading(method, url);
+
     try {
-        const method = mock.condition.method;
-        const url = mock.condition.path;
         const reqBody = mock.condition.body;
         const reqHeaders = mock.condition.headers || {};
 
@@ -134,8 +138,18 @@ async function testMock(mock) {
         openTestResultModal(method, url, status, text, options.body, options.headers);
         loadMocks(); // Refresh to see the log
     } catch (err) {
-        openTestResultModal(mock.condition.method, mock.condition.path, "Error", err.message);
+        openTestResultModal(method, url, "Error", err.message);
     }
+}
+
+function showTestLoading(method, url) {
+    testResultContent.innerHTML = `
+        <div class="loading-container">
+            <div class="spinner"></div>
+            <div class="loading-text">Testing ${method} ${url}...</div>
+        </div>
+    `;
+    testModal.style.display = 'flex';
 }
 
 function openTestResultModal(method, url, status, responseText, requestBody = null, requestHeaders = null) {
@@ -284,6 +298,7 @@ function openModal(mock = null, isClone = false) {
         document.getElementById('mock-path').value = mock.condition.path;
         document.getElementById('mock-req-body').value = mock.condition.body ? JSON.stringify(mock.condition.body, null, 2) : '';
         document.getElementById('mock-status').value = mock.response.status_code || 200;
+        document.getElementById('mock-latency').value = mock.response.latency || 0;
         document.getElementById('mock-res-body').value = mock.response.body ? JSON.stringify(mock.response.body, null, 2) : '';
 
         // Populate request headers
@@ -303,6 +318,7 @@ function openModal(mock = null, isClone = false) {
         mockForm.reset();
         document.getElementById('mock-id').value = '';
         document.getElementById('mock-status').value = 200;
+        document.getElementById('mock-latency').value = 0;
     }
 
     mockModal.style.display = 'flex';
@@ -345,6 +361,7 @@ function setupEventListeners() {
         e.preventDefault();
 
         const idVal = document.getElementById('mock-id').value;
+        const latencyVal = document.getElementById('mock-latency').value;
         const reqBodyStr = document.getElementById('mock-req-body').value;
         const resBodyStr = document.getElementById('mock-res-body').value;
 
@@ -393,6 +410,7 @@ function setupEventListeners() {
             },
             response: {
                 status_code: parseInt(document.getElementById('mock-status').value),
+                latency: latencyVal ? parseInt(latencyVal) : undefined,
                 headers: Object.keys(responseHeaders).length > 0 ? responseHeaders : undefined,
                 body: responseBody
             }

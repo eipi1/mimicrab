@@ -14,6 +14,7 @@ pub struct MockResponse {
     pub status_code: Option<u16>,
     pub headers: Option<HashMap<String, String>>,
     pub body: Option<serde_json::Value>,
+    pub latency: Option<u64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
