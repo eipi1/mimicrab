@@ -20,8 +20,18 @@ def test_dashboard_full_flow(page: Page):
     page.get_by_label("Method").select_option("GET")
     page.locator("#mock-path").fill("/auto-test")
     page.locator("#mock-status").fill("202")
-    page.locator("#mock-latency").fill("100")
     page.locator("#mock-res-body").fill('{"auto": "ready"}')
+    
+    # Advanced Options
+    page.click("#btn-toggle-advanced")
+    expect(page.locator("#advanced-options")).to_be_visible()
+    page.locator("#mock-latency").fill("100")
+    
+    # Jitter - interaction with styled switch
+    page.locator("label.switch").click() # Click the slider container
+    page.locator("#mock-jitter-prob").fill("10")
+    page.locator("#mock-jitter-status").fill("500")
+    page.locator("#mock-jitter-body").fill('{"error": "jitter"}')
     
     # Add a header
     page.get_by_role("button", name="+ Add Res Header").click()

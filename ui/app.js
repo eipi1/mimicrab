@@ -23,6 +23,10 @@ const btnAddHeader = document.getElementById('btn-add-header');
 const headersContainer = document.getElementById('headers-container');
 const btnAddReqHeader = document.getElementById('btn-add-req-header');
 const reqHeadersContainer = document.getElementById('req-headers-container');
+const advancedSection = document.getElementById('advanced-options');
+const btnToggleAdvanced = document.getElementById('btn-toggle-advanced');
+const jitterToggle = document.getElementById('mock-jitter-enabled');
+const jitterSettings = document.getElementById('jitter-settings');
 
 // Test Result Modal Elements
 const testModal = document.getElementById('test-modal');
@@ -299,6 +303,19 @@ function openModal(mock = null, isClone = false) {
         document.getElementById('mock-req-body').value = mock.condition.body ? JSON.stringify(mock.condition.body, null, 2) : '';
         document.getElementById('mock-status').value = mock.response.status_code || 200;
         document.getElementById('mock-latency').value = mock.response.latency || 0;
+
+        // Jitter
+        if (mock.response.jitter) {
+            jitterToggle.checked = true;
+            jitterSettings.classList.remove('disabled');
+            document.getElementById('mock-jitter-prob').value = (mock.response.jitter.probability * 100).toFixed(0);
+            document.getElementById('mock-jitter-status').value = mock.response.jitter.status_code;
+            document.getElementById('mock-jitter-body').value = mock.response.jitter.body ? JSON.stringify(mock.response.jitter.body, null, 2) : '';
+        } else {
+            jitterToggle.checked = false;
+            jitterSettings.classList.add('disabled');
+        }
+
         document.getElementById('mock-res-body').value = mock.response.body ? JSON.stringify(mock.response.body, null, 2) : '';
 
         // Populate request headers
@@ -319,7 +336,13 @@ function openModal(mock = null, isClone = false) {
         document.getElementById('mock-id').value = '';
         document.getElementById('mock-status').value = 200;
         document.getElementById('mock-latency').value = 0;
+        jitterToggle.checked = false;
+        jitterSettings.classList.add('disabled');
     }
+
+    // Always hide advanced section on open
+    advancedSection.classList.remove('show');
+    btnToggleAdvanced.querySelector('.toggle-icon').textContent = '▼';
 
     mockModal.style.display = 'flex';
 }
@@ -348,6 +371,19 @@ function setupEventListeners() {
     btnCancelModal.onclick = closeModal;
     btnAddHeader.onclick = () => addHeaderRow(headersContainer);
     btnAddReqHeader.onclick = () => addHeaderRow(reqHeadersContainer);
+
+    btnToggleAdvanced.onclick = () => {
+        const isShown = advancedSection.classList.toggle('show');
+        btnToggleAdvanced.querySelector('.toggle-icon').textContent = isShown ? '▲' : '▼';
+    };
+
+    jitterToggle.onchange = (e) => {
+        if (e.target.checked) {
+            jitterSettings.classList.remove('disabled');
+        } else {
+            jitterSettings.classList.add('disabled');
+        }
+    };
 
     btnCloseTestModal.onclick = closeTestResultModal;
     btnCloseTestFooter.onclick = closeTestResultModal;
@@ -400,6 +436,22 @@ function setupEventListeners() {
             if (key) requestHeaders[key] = value;
         });
 
+        const jitterEnabled = jitterToggle.checked;
+        let jitterConfig = undefined;
+        if (jitterEnabled) {
+            const jitterBodyStr = document.getElementById('mock-jitter-body').value;
+            let jitterBody = null;
+            if (jitterBodyStr.trim()) {
+                try { jitterBody = JSON.parse(jitterBodyStr); }
+                catch (e) { alert('Invalid JSON in jitter error body'); return; }
+            }
+            jitterConfig = {
+                probability: parseFloat(document.getElementById('mock-jitter-prob').value) / 100,
+                status_code: parseInt(document.getElementById('mock-jitter-status').value),
+                body: jitterBody
+            };
+        }
+
         const mock = {
             id: idVal ? parseInt(idVal) : Math.floor(Math.random() * 1000000),
             condition: {
@@ -411,6 +463,7 @@ function setupEventListeners() {
             response: {
                 status_code: parseInt(document.getElementById('mock-status').value),
                 latency: latencyVal ? parseInt(latencyVal) : undefined,
+                jitter: jitterConfig,
                 headers: Object.keys(responseHeaders).length > 0 ? responseHeaders : undefined,
                 body: responseBody
             }

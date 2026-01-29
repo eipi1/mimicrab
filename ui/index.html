@@ -132,9 +132,45 @@
                         <label for="mock-status">Response Status</label>
                         <input type="number" id="mock-status" value="200">
                     </div>
-                    <div class="form-group half">
+                </div>
+
+                <div class="advanced-toggle" id="btn-toggle-advanced">
+                    <span>Advanced Options</span>
+                    <span class="toggle-icon">▼</span>
+                </div>
+
+                <div id="advanced-options" class="advanced-section">
+                    <div class="form-group">
                         <label for="mock-latency">Latency (ms)</label>
                         <input type="number" id="mock-latency" value="0" min="0">
+                    </div>
+
+                    <div class="jitter-control">
+                        <div class="form-group checkbox-group">
+                            <label class="switch">
+                                <input type="checkbox" id="mock-jitter-enabled">
+                                <span class="slider round"></span>
+                            </label>
+                            <span>Enable Jitter (Random Errors)</span>
+                        </div>
+                    </div>
+
+                    <div id="jitter-settings" class="jitter-settings disabled">
+                        <div class="form-row">
+                            <div class="form-group half">
+                                <label for="mock-jitter-prob">Error Probability (%)</label>
+                                <input type="number" id="mock-jitter-prob" value="10" min="0" max="100">
+                            </div>
+                            <div class="form-group half">
+                                <label for="mock-jitter-status">Error Status Code</label>
+                                <input type="number" id="mock-jitter-status" value="500">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="mock-jitter-body">Error Response Body (JSON)</label>
+                            <textarea id="mock-jitter-body" placeholder='{ "error": "intermittent failure" }'
+                                rows="3"></textarea>
+                        </div>
                     </div>
                 </div>
 

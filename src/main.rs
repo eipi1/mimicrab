@@ -280,7 +280,6 @@ async fn handle_request(State(state): State<Arc<AppState>>, req: Request) -> Res
     let method = &parts.method;
     let headers = &parts.headers;
 
-    // Read body
     let body_bytes = body
         .collect()
         .await
@@ -289,8 +288,6 @@ async fn handle_request(State(state): State<Arc<AppState>>, req: Request) -> Res
     let body_json: Option<Value> = serde_json::from_slice(&body_bytes).ok();
 
     tracing::info!("Incoming request: {} {}", method, path);
-    tracing::trace!("Request headers: {:?}", headers);
-    tracing::trace!("Parsed request body: {:?}", body_json);
 
     let expectations = state.expectations.load();
     let matched = expectations
@@ -317,6 +314,10 @@ async fn handle_request(State(state): State<Arc<AppState>>, req: Request) -> Res
             tokio::time::sleep(std::time::Duration::from_millis(latency)).await;
         }
 
+        if let Some(jitter_res) = apply_jitter(&exp.response, path, &body_json) {
+            return jitter_res;
+        }
+
         let status =
             StatusCode::from_u16(exp.response.status_code.unwrap_or(200)).unwrap_or(StatusCode::OK);
         let mut response_builder = Response::builder().status(status);
@@ -327,57 +328,13 @@ async fn handle_request(State(state): State<Arc<AppState>>, req: Request) -> Res
             }
         }
 
-        // Handle Parameterization
-        let path_segments: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
-
-        let response_body = if let Some(ref res_body) = exp.response.body {
-            let body_str = serde_json::to_string(res_body).unwrap();
-            let resolved_body = templating::resolve_template(&body_str, &path_segments, &body_json);
-
-            let accept_bson = headers
-                .get(header::ACCEPT)
-                .and_then(|h| h.to_str().ok())
-                .map(|s| s.contains("application/bson"))
-                .unwrap_or(false);
-
-            tracing::trace!("Accept BSON: {}", accept_bson);
-
-            if accept_bson {
-                let val: Value = serde_json::from_str(&resolved_body).unwrap_or(Value::Null);
-                tracing::trace!("Converting resolved body to BSON: {:?}", val);
-                if let Ok(bson_val) = bson::to_bson(&val) {
-                    let mut bytes = Vec::new();
-                    if let Some(doc) = bson_val.as_document() {
-                        doc.to_writer(&mut bytes).unwrap();
-                        response_builder =
-                            response_builder.header(header::CONTENT_TYPE, "application/bson");
-                        Body::from(bytes)
-                    } else if let bson::Bson::Array(arr) = bson_val {
-                        // For arrays, we wrap them in a document with a "data" key as BSON must be a document
-                        let doc = bson::doc! { "data": arr };
-                        doc.to_writer(&mut bytes).unwrap();
-                        response_builder =
-                            response_builder.header(header::CONTENT_TYPE, "application/bson");
-                        Body::from(bytes)
-                    } else {
-                        // Fallback to JSON for non-object/non-array types or if BSON conversion is simple
-                        response_builder =
-                            response_builder.header(header::CONTENT_TYPE, "application/json");
-                        Body::from(resolved_body)
-                    }
-                } else {
-                    response_builder =
-                        response_builder.header(header::CONTENT_TYPE, "application/json");
-                    Body::from(resolved_body)
-                }
-            } else {
-                response_builder =
-                    response_builder.header(header::CONTENT_TYPE, "application/json");
-                Body::from(resolved_body)
-            }
-        } else {
-            Body::empty()
-        };
+        let response_body = build_response_body(
+            &exp.response,
+            path,
+            &body_json,
+            headers,
+            &mut response_builder,
+        );
 
         let response = response_builder.body(response_body).unwrap();
         tracing::info!("Returning matched response: status={}", response.status());
@@ -397,4 +354,84 @@ async fn handle_request(State(state): State<Arc<AppState>>, req: Request) -> Res
         )
             .into_response()
     }
+}
+
+fn apply_jitter(
+    res_config: &models::MockResponse,
+    path: &str,
+    body_json: &Option<Value>,
+) -> Option<Response> {
+    let jitter = res_config.jitter.as_ref()?;
+    let random: f64 = rand::random();
+
+    if random < jitter.probability {
+        tracing::info!(
+            "Jitter matched! Returning error response ({} status)",
+            jitter.status_code
+        );
+        let status =
+            StatusCode::from_u16(jitter.status_code).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+        let mut response_builder = Response::builder().status(status);
+
+        let body = if let Some(ref res_body) = jitter.body {
+            let body_str = serde_json::to_string(res_body).unwrap();
+            let path_segments: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
+            let resolved_body = templating::resolve_template(&body_str, &path_segments, body_json);
+            response_builder = response_builder.header(header::CONTENT_TYPE, "application/json");
+            Body::from(resolved_body)
+        } else {
+            Body::empty()
+        };
+
+        return Some(response_builder.body(body).unwrap());
+    }
+    None
+}
+
+fn build_response_body(
+    res_config: &models::MockResponse,
+    path: &str,
+    body_json: &Option<Value>,
+    request_headers: &header::HeaderMap,
+    response_builder: &mut axum::http::response::Builder,
+) -> Body {
+    let Some(ref res_body) = res_config.body else {
+        return Body::empty();
+    };
+
+    let body_str = serde_json::to_string(res_body).unwrap();
+    let path_segments: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
+    let resolved_body = templating::resolve_template(&body_str, &path_segments, body_json);
+
+    let accept_bson = request_headers
+        .get(header::ACCEPT)
+        .and_then(|h| h.to_str().ok())
+        .map(|s| s.contains("application/bson"))
+        .unwrap_or(false);
+
+    if accept_bson {
+        let val: Value = serde_json::from_str(&resolved_body).unwrap_or(Value::Null);
+        if let Ok(bson_val) = bson::to_bson(&val) {
+            let mut bytes = Vec::new();
+            if let Some(doc) = bson_val.as_document() {
+                doc.to_writer(&mut bytes).unwrap();
+                let mut b = Response::builder();
+                std::mem::swap(response_builder, &mut b);
+                *response_builder = b.header(header::CONTENT_TYPE, "application/bson");
+                return Body::from(bytes);
+            } else if let bson::Bson::Array(arr) = bson_val {
+                let doc = bson::doc! { "data": arr };
+                doc.to_writer(&mut bytes).unwrap();
+                let mut b = Response::builder();
+                std::mem::swap(response_builder, &mut b);
+                *response_builder = b.header(header::CONTENT_TYPE, "application/bson");
+                return Body::from(bytes);
+            }
+        }
+    }
+
+    let mut b = Response::builder();
+    std::mem::swap(response_builder, &mut b);
+    *response_builder = b.header(header::CONTENT_TYPE, "application/json");
+    Body::from(resolved_body)
 }

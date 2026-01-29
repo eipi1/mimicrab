@@ -228,3 +228,77 @@ async fn test_mock_latency() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
+
+#[tokio::test]
+async fn test_mock_jitter() -> Result<(), Box<dyn std::error::Error>> {
+    let _server = TestServer::start();
+    let base_url = "http://localhost:3000";
+    wait_for_server(base_url).await;
+
+    let client = reqwest::Client::new();
+    let admin_url = format!("{}/_admin/mocks", base_url);
+
+    // Add a mock with 100% jitter (probability 1.0)
+    let new_mock = json!({
+        "id": 555123,
+        "condition": {
+            "method": "GET",
+            "path": "/jitter-test"
+        },
+        "response": {
+            "status_code": 200,
+            "body": { "ok": true },
+            "jitter": {
+                "probability": 1.0,
+                "status_code": 503,
+                "body": { "error": "service unavailable" }
+            }
+        }
+    });
+
+    client.post(&admin_url).json(&new_mock).send().await?;
+
+    // Verify it returns the jitter response (100% probability)
+    let res = client
+        .get(format!("{}/jitter-test", base_url))
+        .send()
+        .await?;
+    assert_eq!(res.status(), 503);
+    let body: Value = res.json().await?;
+    assert_eq!(body["error"], "service unavailable");
+
+    // Update to 0% jitter
+    let updated_mock = json!({
+        "id": 555123,
+        "condition": {
+            "method": "GET",
+            "path": "/jitter-test"
+        },
+        "response": {
+            "status_code": 200,
+            "body": { "ok": true },
+            "jitter": {
+                "probability": 0.0,
+                "status_code": 503,
+                "body": { "error": "service unavailable" }
+            }
+        }
+    });
+
+    client
+        .put(format!("{}/{}", admin_url, 555123))
+        .json(&updated_mock)
+        .send()
+        .await?;
+
+    // Verify it returns the normal response (0% probability)
+    let res = client
+        .get(format!("{}/jitter-test", base_url))
+        .send()
+        .await?;
+    assert_eq!(res.status(), 200);
+    let body: Value = res.json().await?;
+    assert_eq!(body["ok"], true);
+
+    Ok(())
+}
