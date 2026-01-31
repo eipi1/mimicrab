@@ -313,6 +313,34 @@ body {
     border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
+/* Curl Command Styling */
+.curl-container {
+    margin: 0 0 20px 0;
+}
+
+.curl-code-wrapper {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    background: #050505;
+    padding: 12px;
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+}
+
+.curl-code-wrapper code {
+    flex: 1;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 0.85rem;
+    color: var(--text-main);
+    word-break: break-all;
+    white-space: pre-wrap;
+}
+
+.curl-code-wrapper .btn {
+    flex-shrink: 0;
+}
+
 /* Modal Styling */
 .modal-overlay {
     position: fixed;
@@ -394,6 +422,23 @@ textarea {
     color: white;
     font-family: inherit;
     outline: none;
+    transition: all 0.2s ease;
+}
+
+select {
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.5)' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    background-size: 16px;
+    padding-right: 40px;
+}
+
+select option {
+    background: #1a1c2d;
+    color: white;
 }
 
 input:focus,
@@ -401,6 +446,82 @@ select:focus,
 textarea:focus {
     border-color: var(--accent-primary);
     box-shadow: 0 0 0 2px rgba(124, 77, 255, 0.2);
+}
+
+.invalid-json {
+    border-color: #ff5252 !important;
+    box-shadow: 0 0 0 2px rgba(255, 82, 82, 0.2) !important;
+}
+
+.json-header {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: -8px;
+    margin-bottom: 4px;
+    height: 16px;
+}
+
+.json-validation-msg {
+    font-size: 0.75rem;
+    color: #ff5252;
+}
+
+.label-with-action {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.label-with-action label {
+    margin-bottom: 0;
+}
+
+.body-type-selector {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    background: rgba(255, 255, 255, 0.03);
+    padding: 4px 10px;
+    border-radius: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.body-type-selector label {
+    margin: 0;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    opacity: 0.7;
+}
+
+.sm-select {
+    padding: 2px 20px 2px 4px;
+    font-size: 0.75rem;
+    width: auto;
+    border-radius: 4px;
+    background: transparent;
+    border: none;
+    color: var(--accent-primary);
+    cursor: pointer;
+    font-weight: 600;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%237c4dff' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0 center;
+    background-size: 12px;
+}
+
+.sm-select:focus {
+    box-shadow: none;
+    outline: none;
+}
+
+.sm-select option {
+    background: #1a1c2d;
+    color: white;
 }
 
 /* Logs Styling */

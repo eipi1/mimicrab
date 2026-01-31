@@ -403,35 +403,84 @@ fn build_response_body(
     let path_segments: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
     let resolved_body = templating::resolve_template(&body_str, &path_segments, body_json);
 
+    // Handle Non-JSON (Text/HTML) body type
+    if let Some(ref b_type) = res_config.body_type
+        && b_type == "text"
+    {
+        return handle_text_response(resolved_body, response_builder);
+    }
+
     let accept_bson = request_headers
         .get(header::ACCEPT)
         .and_then(|h| h.to_str().ok())
         .map(|s| s.contains("application/bson"))
         .unwrap_or(false);
 
-    if accept_bson {
-        let val: Value = serde_json::from_str(&resolved_body).unwrap_or(Value::Null);
-        if let Ok(bson_val) = bson::to_bson(&val) {
-            let mut bytes = Vec::new();
-            if let Some(doc) = bson_val.as_document() {
-                doc.to_writer(&mut bytes).unwrap();
-                let mut b = Response::builder();
-                std::mem::swap(response_builder, &mut b);
-                *response_builder = b.header(header::CONTENT_TYPE, "application/bson");
-                return Body::from(bytes);
-            } else if let bson::Bson::Array(arr) = bson_val {
-                let doc = bson::doc! { "data": arr };
-                doc.to_writer(&mut bytes).unwrap();
-                let mut b = Response::builder();
-                std::mem::swap(response_builder, &mut b);
-                *response_builder = b.header(header::CONTENT_TYPE, "application/bson");
-                return Body::from(bytes);
-            }
-        }
+    if accept_bson && let Some(body) = handle_bson_response(&resolved_body, response_builder) {
+        return body;
     }
+
+    // Default to JSON
+    let mut b = Response::builder();
+    std::mem::swap(response_builder, &mut b);
+    if !b
+        .headers_ref()
+        .map(|h| h.contains_key(header::CONTENT_TYPE))
+        .unwrap_or(false)
+    {
+        *response_builder = b.header(header::CONTENT_TYPE, "application/json");
+    } else {
+        *response_builder = b;
+    }
+    Body::from(resolved_body)
+}
+
+fn handle_text_response(
+    resolved_body: String,
+    response_builder: &mut axum::http::response::Builder,
+) -> Body {
+    // If it's stored as a JSON string, extract the raw content
+    let raw_body = serde_json::from_str::<Value>(&resolved_body)
+        .ok()
+        .and_then(|v| v.as_str().map(|s| s.to_string()))
+        .unwrap_or(resolved_body);
 
     let mut b = Response::builder();
     std::mem::swap(response_builder, &mut b);
-    *response_builder = b.header(header::CONTENT_TYPE, "application/json");
-    Body::from(resolved_body)
+
+    // Set default content type to text/plain if not already set by headers
+    if !b
+        .headers_ref()
+        .map(|h| h.contains_key(header::CONTENT_TYPE))
+        .unwrap_or(false)
+    {
+        *response_builder = b.header(header::CONTENT_TYPE, "text/plain");
+    } else {
+        *response_builder = b;
+    }
+    Body::from(raw_body)
+}
+
+fn handle_bson_response(
+    resolved_body: &str,
+    response_builder: &mut axum::http::response::Builder,
+) -> Option<Body> {
+    let val: Value = serde_json::from_str(resolved_body).unwrap_or(Value::Null);
+    if let Ok(bson_val) = bson::to_bson(&val) {
+        let mut bytes = Vec::new();
+        if let Some(doc) = bson_val.as_document() {
+            doc.to_writer(&mut bytes).unwrap();
+        } else if let bson::Bson::Array(arr) = bson_val {
+            let doc = bson::doc! { "data": arr };
+            doc.to_writer(&mut bytes).unwrap();
+        } else {
+            return None;
+        }
+
+        let mut b = Response::builder();
+        std::mem::swap(response_builder, &mut b);
+        *response_builder = b.header(header::CONTENT_TYPE, "application/bson");
+        return Some(Body::from(bytes));
+    }
+    None
 }

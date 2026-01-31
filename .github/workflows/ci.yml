@@ -27,8 +27,6 @@ jobs:
         
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: rust-1.93
 
       - name: Check
         run: cargo check
@@ -72,9 +70,7 @@ jobs:
           
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: "rust-1.93"
-        
+
       - name: Install test dependencies
         run: |
           pip install -r tests/requirements-test.txt

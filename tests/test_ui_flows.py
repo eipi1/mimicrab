@@ -47,7 +47,14 @@ def test_dashboard_full_flow(page: Page):
     # 3. Use "Test" button
     page.get_by_role("button", name="Test").first.click()
     expect(page.locator("#test-modal")).to_be_visible()
+    # Wait for result (avoid race condition with loading)
+    expect(page.locator("#test-result-content")).to_contain_text("Status Code")
     expect(page.locator("#test-result-content")).to_contain_text("/auto-test")
+    
+    # Check curl command
+    expect(page.locator("#curl-command")).to_contain_text("curl -X GET")
+    expect(page.locator("#curl-command")).to_contain_text("/auto-test")
+    
     page.get_by_role("button", name="Close").click()
     expect(page.locator("#test-modal")).not_to_be_visible()
     
@@ -67,3 +74,30 @@ def test_dashboard_full_flow(page: Page):
     
     # Verify specific mock is gone
     expect(page.locator(".card").filter(has_text="/auto-test")).not_to_be_visible()
+
+def test_non_json_response(page: Page):
+    page.goto(BASE_URL)
+    
+    # Create a non-JSON mock
+    page.get_by_role("button", name="+ Create Mock").click()
+    page.locator("#mock-path").fill("/text-test")
+    
+    # Select Text type
+    page.locator("#mock-body-type").select_option("text")
+    page.locator("#mock-res-body").fill("Hello World <html>")
+    
+    page.get_by_role("button", name="Save Mock").click()
+    
+    # Test it
+    page.get_by_role("button", name="Test").first.click()
+    expect(page.locator("#test-result-content")).to_contain_text("Status Code")
+    expect(page.locator("#test-result-content")).to_contain_text("Hello World <html>")
+    
+    # Verify curl for text body (no content-type json header if not specified)
+    expect(page.locator("#curl-command")).to_contain_text("curl -X GET")
+    
+    page.get_by_role("button", name="Close").click()
+    
+    # Cleanup
+    page.once("dialog", lambda dialog: dialog.accept())
+    page.get_by_role("button", name="Delete").first.click()

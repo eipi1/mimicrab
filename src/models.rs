@@ -21,6 +21,7 @@ pub struct MockResponse {
     pub status_code: Option<u16>,
     pub headers: Option<HashMap<String, String>>,
     pub body: Option<serde_json::Value>,
+    pub body_type: Option<String>,
     pub latency: Option<u64>,
     pub jitter: Option<JitterConfig>,
 }

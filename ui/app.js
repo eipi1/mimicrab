@@ -118,6 +118,8 @@ async function testMock(mock) {
     const url = mock.condition.path;
     showTestLoading(method, url);
 
+    const curlCmd = generateCurlCommand(mock);
+
     try {
         const reqBody = mock.condition.body;
         const reqHeaders = mock.condition.headers || {};
@@ -139,10 +141,15 @@ async function testMock(mock) {
         const status = res.status;
         const text = await res.text();
 
-        openTestResultModal(method, url, status, text, options.body, options.headers);
+        // Only update if the modal is still shown (user hasn't closed the loading state)
+        if (testModal.style.display === 'flex') {
+            openTestResultModal(method, url, status, text, options.body, options.headers, curlCmd);
+        }
         loadMocks(); // Refresh to see the log
     } catch (err) {
-        openTestResultModal(method, url, "Error", err.message);
+        if (testModal.style.display === 'flex') {
+            openTestResultModal(method, url, "Error", err.message, null, null, curlCmd);
+        }
     }
 }
 
@@ -156,8 +163,10 @@ function showTestLoading(method, url) {
     testModal.style.display = 'flex';
 }
 
-function openTestResultModal(method, url, status, responseText, requestBody = null, requestHeaders = null) {
+function openTestResultModal(method, url, status, responseText, requestBody = null, requestHeaders = null, curlCmd = '') {
     const headersStr = requestHeaders ? Object.entries(requestHeaders).map(([k, v]) => `${k}: ${v}`).join('\n') : '';
+
+    document.getElementById('curl-command').textContent = curlCmd;
 
     testResultContent.innerHTML = `
         <div class="test-result-item">
@@ -180,9 +189,10 @@ function openTestResultModal(method, url, status, responseText, requestBody = nu
         </div>
         <div class="test-result-item">
             <span class="test-result-label">Response Body</span>
-            <div class="test-result-value">${responseText || '(empty)'}</div>
+            <div class="test-result-value" id="test-res-body-value"></div>
         </div>
     `;
+    document.getElementById('test-res-body-value').textContent = responseText || '(empty)';
     testModal.style.display = 'flex';
 }
 
@@ -303,6 +313,7 @@ function openModal(mock = null, isClone = false) {
         document.getElementById('mock-req-body').value = mock.condition.body ? JSON.stringify(mock.condition.body, null, 2) : '';
         document.getElementById('mock-status').value = mock.response.status_code || 200;
         document.getElementById('mock-latency').value = mock.response.latency || 0;
+        document.getElementById('mock-body-type').value = mock.response.body_type || 'json';
 
         // Jitter
         if (mock.response.jitter) {
@@ -316,7 +327,17 @@ function openModal(mock = null, isClone = false) {
             jitterSettings.classList.add('disabled');
         }
 
-        document.getElementById('mock-res-body').value = mock.response.body ? JSON.stringify(mock.response.body, null, 2) : '';
+        // Response Body
+        const resBody = mock.response.body;
+        if (resBody !== undefined && resBody !== null) {
+            if (mock.response.body_type === 'text') {
+                document.getElementById('mock-res-body').value = typeof resBody === 'string' ? resBody : JSON.stringify(resBody, null, 2);
+            } else {
+                document.getElementById('mock-res-body').value = JSON.stringify(resBody, null, 2);
+            }
+        } else {
+            document.getElementById('mock-res-body').value = '';
+        }
 
         // Populate request headers
         if (mock.condition.headers) {
@@ -336,9 +357,14 @@ function openModal(mock = null, isClone = false) {
         document.getElementById('mock-id').value = '';
         document.getElementById('mock-status').value = 200;
         document.getElementById('mock-latency').value = 0;
+        document.getElementById('mock-body-type').value = 'json';
         jitterToggle.checked = false;
         jitterSettings.classList.add('disabled');
     }
+
+    // Reset validation states
+    document.querySelectorAll('.invalid-json').forEach(el => el.classList.remove('invalid-json'));
+    document.querySelectorAll('.json-validation-msg').forEach(el => el.textContent = '');
 
     // Always hide advanced section on open
     advancedSection.classList.remove('show');
@@ -388,6 +414,56 @@ function setupEventListeners() {
     btnCloseTestModal.onclick = closeTestResultModal;
     btnCloseTestFooter.onclick = closeTestResultModal;
 
+    document.getElementById('btn-copy-curl').onclick = () => {
+        const text = document.getElementById('curl-command').textContent;
+        navigator.clipboard.writeText(text).then(() => {
+            const btn = document.getElementById('btn-copy-curl');
+            const originalText = btn.textContent;
+            btn.textContent = 'Copied!';
+            btn.classList.add('btn-primary');
+            setTimeout(() => {
+                btn.textContent = originalText;
+                btn.classList.remove('btn-primary');
+            }, 2000);
+        });
+    };
+
+    // Real-time JSON validation
+    const validate = (id, msgId) => {
+        const el = document.getElementById(id);
+        const msgEl = document.getElementById(msgId);
+        const val = el.value.trim();
+
+        // Skip if text type is selected for response body
+        if (id === 'mock-res-body' && document.getElementById('mock-body-type').value === 'text') {
+            el.classList.remove('invalid-json');
+            msgEl.textContent = '';
+            return true;
+        }
+
+        if (!val) {
+            el.classList.remove('invalid-json');
+            msgEl.textContent = '';
+            return true;
+        }
+
+        try {
+            JSON.parse(val);
+            el.classList.remove('invalid-json');
+            msgEl.textContent = '';
+            return true;
+        } catch (e) {
+            el.classList.add('invalid-json');
+            msgEl.textContent = 'Invalid JSON';
+            return false;
+        }
+    };
+
+    document.getElementById('mock-req-body').oninput = () => validate('mock-req-body', 'msg-req-body');
+    document.getElementById('mock-res-body').oninput = () => validate('mock-res-body', 'msg-res-body');
+    document.getElementById('mock-jitter-body').oninput = () => validate('mock-jitter-body', 'msg-jitter-body');
+    document.getElementById('mock-body-type').onchange = () => validate('mock-res-body', 'msg-res-body');
+
     window.onclick = (event) => {
         if (event.target === mockModal) closeModal();
         if (event.target === testModal) closeTestResultModal();
@@ -413,12 +489,17 @@ function setupEventListeners() {
             }
         }
 
+        const bodyType = document.getElementById('mock-body-type').value;
         if (resBodyStr.trim()) {
-            try {
-                responseBody = JSON.parse(resBodyStr);
-            } catch (err) {
-                alert('Invalid JSON in response body');
-                return;
+            if (bodyType === 'json') {
+                try {
+                    responseBody = JSON.parse(resBodyStr);
+                } catch (err) {
+                    alert('Invalid JSON in response body');
+                    return;
+                }
+            } else {
+                responseBody = resBodyStr;
             }
         }
 
@@ -465,7 +546,8 @@ function setupEventListeners() {
                 latency: latencyVal ? parseInt(latencyVal) : undefined,
                 jitter: jitterConfig,
                 headers: Object.keys(responseHeaders).length > 0 ? responseHeaders : undefined,
-                body: responseBody
+                body: responseBody,
+                body_type: bodyType
             }
         };
 
@@ -527,4 +609,28 @@ function setupEventListeners() {
         };
         reader.readAsText(file);
     };
+}
+
+function generateCurlCommand(mock) {
+    const method = mock.condition.method;
+    const url = window.location.origin + mock.condition.path;
+    let curl = `curl -X ${method} "${url}"`;
+
+    // Headers
+    if (mock.condition.headers) {
+        Object.entries(mock.condition.headers).forEach(([k, v]) => {
+            curl += ` -H "${k}: ${v}"`;
+        });
+    }
+
+    // Body
+    if (mock.condition.body) {
+        curl += ` -H "Content-Type: application/json" -d '${JSON.stringify(mock.condition.body)}'`;
+    } else if (['POST', 'PUT', 'PATCH'].includes(method) && mock.response.body && mock.response.body_type === 'json') {
+        curl += ` -H "Content-Type: application/json" -d '${JSON.stringify(mock.response.body)}'`;
+    } else if (['POST', 'PUT', 'PATCH'].includes(method) && mock.response.body && mock.response.body_type === 'text') {
+        curl += ` -d '${mock.response.body}'`;
+    }
+
+    return curl;
 }

@@ -84,6 +84,13 @@
             <div id="test-result-content" class="test-result-content">
                 <!-- Result details here -->
             </div>
+            <div class="curl-container" id="curl-area">
+                <span class="test-result-label">CURL Command</span>
+                <div class="curl-code-wrapper">
+                    <code id="curl-command"></code>
+                    <button class="btn btn-secondary btn-sm" id="btn-copy-curl">Copy</button>
+                </div>
+            </div>
             <footer class="modal-footer">
                 <button type="button" class="btn btn-primary" id="btn-close-test-footer">Close</button>
             </footer>
@@ -113,6 +120,9 @@
                 </div>
                 <div class="form-group">
                     <label for="mock-req-body">Request Body (Optional - matches only if provided)</label>
+                    <div class="json-header">
+                        <span class="json-validation-msg" id="msg-req-body"></span>
+                    </div>
                     <textarea id="mock-req-body" rows="3" placeholder='{"key": "value"}'></textarea>
                 </div>
 
@@ -168,6 +178,9 @@
                         </div>
                         <div class="form-group">
                             <label for="mock-jitter-body">Error Response Body (JSON)</label>
+                            <div class="json-header">
+                                <span class="json-validation-msg" id="msg-jitter-body"></span>
+                            </div>
                             <textarea id="mock-jitter-body" placeholder='{ "error": "intermittent failure" }'
                                 rows="3"></textarea>
                         </div>
@@ -183,7 +196,19 @@
                 </div>
 
                 <div class="form-group">
-                    <label for="mock-res-body">Response Body (JSON)</label>
+                    <div class="label-with-action">
+                        <label for="mock-res-body">Response Body</label>
+                        <div class="body-type-selector">
+                            <label for="mock-body-type">Type:</label>
+                            <select id="mock-body-type" class="sm-select">
+                                <option value="json">JSON</option>
+                                <option value="text">Text / HTML</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="json-header">
+                        <span class="json-validation-msg" id="msg-res-body"></span>
+                    </div>
                     <textarea id="mock-res-body" placeholder='{ "message": "success" }' rows="5"></textarea>
                 </div>
 
