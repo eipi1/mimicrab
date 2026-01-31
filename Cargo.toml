@@ -22,7 +22,7 @@ kube = { version = "0.91", features = ["runtime", "derive"] }
 k8s-openapi = { version = "0.22", features = ["v1_28"] }
 arc-swap = "1.7"
 bson = "2"
-rust-embed = { version = "8", features = ["axum"] }
+rust-embed-for-web = {version = "11.3", features = ["always-embed"]}
 mime_guess = "2.0"
 rand = "0.9.2"
 reqwest = { version = "0.13", features = ["json"] }

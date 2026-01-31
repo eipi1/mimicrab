@@ -22,7 +22,7 @@ use futures::stream::Stream;
 use http_body_util::BodyExt;
 use kube::Client;
 use models::Expectation;
-use rust_embed::RustEmbed;
+use rust_embed_for_web::{EmbedableFile, RustEmbed};
 use serde_json::{Value, json};
 use std::{convert::Infallible, fs, sync::Arc};
 use tokio::sync::broadcast;
@@ -55,6 +55,8 @@ struct AppState {
 }
 
 #[derive(RustEmbed)]
+#[gzip = true]
+#[br = true]
 #[folder = "ui/"]
 struct Assets;
 
@@ -273,7 +275,7 @@ async fn stream_logs(
     Sse::new(stream)
 }
 
-async fn static_handler(path: Option<AxPath<String>>) -> impl IntoResponse {
+async fn static_handler(path: Option<AxPath<String>>, headers: HeaderMap) -> Response {
     let path = path
         .map(|AxPath(p)| p)
         .unwrap_or_else(|| "index.html".to_string());
@@ -285,11 +287,51 @@ async fn static_handler(path: Option<AxPath<String>>) -> impl IntoResponse {
 
     match Assets::get(path) {
         Some(content) => {
+            // Cache validation
+            if let Some(if_none_match) = headers.get(header::IF_NONE_MATCH)
+                && if_none_match == content.etag()
+            {
+                return StatusCode::NOT_MODIFIED.into_response();
+            }
+
             let mime = mime_guess::from_path(path).first_or_octet_stream();
-            Response::builder()
+            let mut builder = Response::builder()
                 .header(header::CONTENT_TYPE, mime.as_ref())
-                .body(Body::from(content.data))
-                .unwrap()
+                .header(header::ETAG, content.etag());
+
+            if let Some(last_modified) = content.last_modified() {
+                builder = builder.header(header::LAST_MODIFIED, last_modified);
+            }
+
+            // Compression negotiation
+            let accept_enc = headers
+                .get_all(header::ACCEPT_ENCODING)
+                .iter()
+                .filter_map(|h| h.to_str().ok())
+                .collect::<Vec<_>>()
+                .join(", ");
+
+            tracing::debug!("Request Accept-Encoding: {}", accept_enc);
+            tracing::debug!(
+                "Asset {} supports: br={}, gzip={}",
+                path,
+                content.data_br().is_some(),
+                content.data_gzip().is_some()
+            );
+
+            if accept_enc.contains("br") && content.data_br().is_some() {
+                builder
+                    .header(header::CONTENT_ENCODING, "br")
+                    .body(Body::from(content.data_br().unwrap()))
+                    .unwrap()
+            } else if accept_enc.contains("gzip") && content.data_gzip().is_some() {
+                builder
+                    .header(header::CONTENT_ENCODING, "gzip")
+                    .body(Body::from(content.data_gzip().unwrap()))
+                    .unwrap()
+            } else {
+                builder.body(Body::from(content.data())).unwrap()
+            }
         }
         None => (StatusCode::NOT_FOUND, "Not Found").into_response(),
     }

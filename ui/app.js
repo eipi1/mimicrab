@@ -475,6 +475,13 @@ function setupEventListeners() {
         }
     };
 
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            closeModal();
+            closeTestResultModal();
+        }
+    });
+
     btnCloseTestModal.onclick = closeTestResultModal;
     btnCloseTestFooter.onclick = closeTestResultModal;
 

@@ -14,8 +14,8 @@ impl TestServer {
             cmd.arg("--port").arg(p.to_string());
         }
         let child = cmd
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
             .spawn()
             .expect("Failed to start mimicrab server");
 
@@ -356,6 +356,68 @@ async fn test_mock_proxy() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(res.status(), 200);
     let body: Value = res.json().await?;
     assert_eq!(body["from"], "upstream");
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_static_asset_caching_and_compression() -> Result<(), Box<dyn std::error::Error>> {
+    let _server = TestServer::start(Some(3003));
+    wait_for_server("http://localhost:3003").await;
+
+    let client = reqwest::Client::new();
+
+    // 1. Test ETag / 304 Not Modified
+    let res = client
+        .get("http://localhost:3003/ui/index.html")
+        .send()
+        .await?;
+    assert_eq!(res.status(), 200);
+    let etag = res
+        .headers()
+        .get("etag")
+        .expect("ETag header missing")
+        .clone();
+
+    let res304 = client
+        .get("http://localhost:3003/ui/index.html")
+        .header("If-None-Match", etag)
+        .send()
+        .await?;
+    assert_eq!(res304.status(), 304);
+
+    // 2. Test Brotli Preference
+    let res_br = client
+        .get("http://localhost:3003/ui/index.html")
+        .header("Accept-Encoding", "br, gzip")
+        .send()
+        .await?;
+    assert_eq!(res_br.status(), 200);
+    // Note: rust-embed-for-web might not have br for very small files if skipped,
+    // but index.html should be large enough or we can check what's actually there.
+    let enc = res_br.headers().get("content-encoding");
+    assert!(enc.is_some(), "Content-Encoding should be present for br");
+    assert_eq!(enc.unwrap(), "br");
+
+    // 3. Test Gzip Fallback
+    let res_gzip = client
+        .get("http://localhost:3003/ui/index.html")
+        .header("Accept-Encoding", "gzip")
+        .send()
+        .await?;
+    assert_eq!(res_gzip.status(), 200);
+    let enc = res_gzip.headers().get("content-encoding");
+    assert!(enc.is_some(), "Content-Encoding should be present for gzip");
+    assert_eq!(enc.unwrap(), "gzip");
+
+    // 4. Test Uncompressed
+    let res_none = client
+        .get("http://localhost:3003/ui/index.html")
+        .header("Accept-Encoding", "identity")
+        .send()
+        .await?;
+    assert_eq!(res_none.status(), 200);
+    assert!(res_none.headers().get("content-encoding").is_none());
 
     Ok(())
 }

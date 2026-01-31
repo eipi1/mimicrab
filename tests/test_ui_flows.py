@@ -217,3 +217,28 @@ def test_jitter_proxy_mutual_exclusivity(page: Page):
     expect(page.locator("#proxy-settings")).to_have_class("proxy-settings disabled")
     
     page.click("#btn-cancel-modal")
+
+def test_modal_close_on_esc(page: Page):
+    page.goto(BASE_URL)
+    
+    # 1. Test Create Mock Modal
+    page.get_by_role("button", name="+ Create Mock").click()
+    expect(page.locator("#mock-modal")).to_be_visible()
+    page.keyboard.press("Escape")
+    expect(page.locator("#mock-modal")).not_to_be_visible()
+    
+    # 2. Test Test Result Modal
+    # Create a simple mock first
+    page.get_by_role("button", name="+ Create Mock").click()
+    page.locator("#mock-path").fill("/esc-test")
+    page.get_by_role("button", name="Save Mock").click()
+    
+    # Open Test Result
+    page.get_by_role("button", name="Test").first.click()
+    expect(page.locator("#test-modal")).to_be_visible()
+    page.keyboard.press("Escape")
+    expect(page.locator("#test-modal")).not_to_be_visible()
+    
+    # Cleanup
+    page.once("dialog", lambda dialog: dialog.accept())
+    page.get_by_role("button", name="Delete").first.click()
