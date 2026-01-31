@@ -27,6 +27,8 @@ const advancedSection = document.getElementById('advanced-options');
 const btnToggleAdvanced = document.getElementById('btn-toggle-advanced');
 const jitterToggle = document.getElementById('mock-jitter-enabled');
 const jitterSettings = document.getElementById('jitter-settings');
+const jitterHeadersContainer = document.getElementById('jitter-headers-container');
+const btnAddJitterHeader = document.getElementById('btn-add-jitter-header');
 
 // Test Result Modal Elements
 const testModal = document.getElementById('test-modal');
@@ -305,6 +307,7 @@ function openModal(mock = null, isClone = false) {
 
     headersContainer.innerHTML = '';
     reqHeadersContainer.innerHTML = '';
+    jitterHeadersContainer.innerHTML = '';
 
     if (mock) {
         document.getElementById('mock-id').value = isClone ? '' : mock.id;
@@ -320,8 +323,27 @@ function openModal(mock = null, isClone = false) {
             jitterToggle.checked = true;
             jitterSettings.classList.remove('disabled');
             document.getElementById('mock-jitter-prob').value = (mock.response.jitter.probability * 100).toFixed(0);
-            document.getElementById('mock-jitter-status').value = mock.response.jitter.status_code;
-            document.getElementById('mock-jitter-body').value = mock.response.jitter.body ? JSON.stringify(mock.response.jitter.body, null, 2) : '';
+            document.getElementById('mock-jitter-status').value = mock.response.jitter.status_code || 500;
+            document.getElementById('mock-jitter-body-type').value = mock.response.jitter.body_type || 'json';
+            document.getElementById('mock-jitter-latency').value = mock.response.jitter.latency || 0;
+
+            const jitterResBody = mock.response.jitter.body;
+            if (jitterResBody !== undefined && jitterResBody !== null) {
+                if (mock.response.jitter.body_type === 'text') {
+                    document.getElementById('mock-jitter-body').value = typeof jitterResBody === 'string' ? jitterResBody : JSON.stringify(jitterResBody, null, 2);
+                } else {
+                    document.getElementById('mock-jitter-body').value = JSON.stringify(jitterResBody, null, 2);
+                }
+            } else {
+                document.getElementById('mock-jitter-body').value = '';
+            }
+
+            // Jitter headers
+            if (mock.response.jitter.headers) {
+                Object.entries(mock.response.jitter.headers).forEach(([key, value]) => {
+                    addHeaderRow(jitterHeadersContainer, key, value);
+                });
+            }
         } else {
             jitterToggle.checked = false;
             jitterSettings.classList.add('disabled');
@@ -358,6 +380,8 @@ function openModal(mock = null, isClone = false) {
         document.getElementById('mock-status').value = 200;
         document.getElementById('mock-latency').value = 0;
         document.getElementById('mock-body-type').value = 'json';
+        document.getElementById('mock-jitter-body-type').value = 'json';
+        document.getElementById('mock-jitter-latency').value = 0;
         jitterToggle.checked = false;
         jitterSettings.classList.add('disabled');
     }
@@ -397,6 +421,7 @@ function setupEventListeners() {
     btnCancelModal.onclick = closeModal;
     btnAddHeader.onclick = () => addHeaderRow(headersContainer);
     btnAddReqHeader.onclick = () => addHeaderRow(reqHeadersContainer);
+    btnAddJitterHeader.onclick = () => addHeaderRow(jitterHeadersContainer);
 
     btnToggleAdvanced.onclick = () => {
         const isShown = advancedSection.classList.toggle('show');
@@ -441,6 +466,13 @@ function setupEventListeners() {
             return true;
         }
 
+        // Skip if text type is selected for jitter body
+        if (id === 'mock-jitter-body' && document.getElementById('mock-jitter-body-type').value === 'text') {
+            el.classList.remove('invalid-json');
+            msgEl.textContent = '';
+            return true;
+        }
+
         if (!val) {
             el.classList.remove('invalid-json');
             msgEl.textContent = '';
@@ -463,6 +495,7 @@ function setupEventListeners() {
     document.getElementById('mock-res-body').oninput = () => validate('mock-res-body', 'msg-res-body');
     document.getElementById('mock-jitter-body').oninput = () => validate('mock-jitter-body', 'msg-jitter-body');
     document.getElementById('mock-body-type').onchange = () => validate('mock-res-body', 'msg-res-body');
+    document.getElementById('mock-jitter-body-type').onchange = () => validate('mock-jitter-body', 'msg-jitter-body');
 
     window.onclick = (event) => {
         if (event.target === mockModal) closeModal();
@@ -521,15 +554,37 @@ function setupEventListeners() {
         let jitterConfig = undefined;
         if (jitterEnabled) {
             const jitterBodyStr = document.getElementById('mock-jitter-body').value;
+            const jitterBodyType = document.getElementById('mock-jitter-body-type').value;
+            const jitterLatencyVal = document.getElementById('mock-jitter-latency').value;
+
             let jitterBody = null;
             if (jitterBodyStr.trim()) {
-                try { jitterBody = JSON.parse(jitterBodyStr); }
-                catch (e) { alert('Invalid JSON in jitter error body'); return; }
+                if (jitterBodyType === 'json') {
+                    try {
+                        jitterBody = JSON.parse(jitterBodyStr);
+                    } catch (err) {
+                        alert('Invalid JSON in jitter response body');
+                        return;
+                    }
+                } else {
+                    jitterBody = jitterBodyStr;
+                }
             }
+
+            const jitterResponseHeaders = {};
+            jitterHeadersContainer.querySelectorAll('.header-row').forEach(row => {
+                const key = row.querySelector('.header-key').value.trim();
+                const value = row.querySelector('.header-value').value.trim();
+                if (key) jitterResponseHeaders[key] = value;
+            });
+
             jitterConfig = {
                 probability: parseFloat(document.getElementById('mock-jitter-prob').value) / 100,
                 status_code: parseInt(document.getElementById('mock-jitter-status').value),
-                body: jitterBody
+                body: jitterBody,
+                body_type: jitterBodyType,
+                latency: jitterLatencyVal ? parseInt(jitterLatencyVal) : undefined,
+                headers: Object.keys(jitterResponseHeaders).length > 0 ? jitterResponseHeaders : undefined
             };
         }
 

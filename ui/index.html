@@ -150,11 +150,6 @@
                 </div>
 
                 <div id="advanced-options" class="advanced-section">
-                    <div class="form-group">
-                        <label for="mock-latency">Latency (ms)</label>
-                        <input type="number" id="mock-latency" value="0" min="0">
-                    </div>
-
                     <div class="jitter-control">
                         <div class="form-group checkbox-group">
                             <label class="switch">
@@ -176,13 +171,37 @@
                                 <input type="number" id="mock-jitter-status" value="500">
                             </div>
                         </div>
+
                         <div class="form-group">
-                            <label for="mock-jitter-body">Error Response Body (JSON)</label>
+                            <label>Jitter Response Headers</label>
+                            <div id="jitter-headers-container" class="headers-container">
+                                <!-- Rows added dynamically -->
+                            </div>
+                            <button type="button" class="btn btn-secondary btn-sm" id="btn-add-jitter-header">+ Add
+                                Jitter Header</button>
+                        </div>
+
+                        <div class="form-group">
+                            <div class="label-with-action">
+                                <label for="mock-jitter-body">Jitter Response Body</label>
+                                <div class="body-type-selector">
+                                    <label for="mock-jitter-body-type">Type:</label>
+                                    <select id="mock-jitter-body-type" class="sm-select">
+                                        <option value="json">JSON</option>
+                                        <option value="text">Text / HTML</option>
+                                    </select>
+                                </div>
+                            </div>
                             <div class="json-header">
                                 <span class="json-validation-msg" id="msg-jitter-body"></span>
                             </div>
                             <textarea id="mock-jitter-body" placeholder='{ "error": "intermittent failure" }'
                                 rows="3"></textarea>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="mock-jitter-latency">Jitter Latency (ms)</label>
+                            <input type="number" id="mock-jitter-latency" value="0" min="0">
                         </div>
                     </div>
                 </div>
@@ -210,6 +229,11 @@
                         <span class="json-validation-msg" id="msg-res-body"></span>
                     </div>
                     <textarea id="mock-res-body" placeholder='{ "message": "success" }' rows="5"></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="mock-latency">Response Latency (ms)</label>
+                    <input type="number" id="mock-latency" value="0" min="0">
                 </div>
 
                 <footer class="modal-footer">

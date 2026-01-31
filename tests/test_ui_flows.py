@@ -67,8 +67,27 @@ def test_dashboard_full_flow(page: Page):
     page.get_by_role("button", name="Export/Import").click()
     page.get_by_role("button", name="Export to JSON").click()
 
-    # 6. Delete Mock
+    # 6. Edit Mock (This would have caught the Jitter TypeError)
     page.get_by_role("button", name="Mocks").click()
+    page.get_by_role("button", name="Edit").first.click()
+    expect(page.locator("#modal-title")).to_contain_text("Edit Mock")
+    
+    # Verify values are populated (hydration)
+    expect(page.locator("#mock-path")).to_have_value("/auto-test")
+    expect(page.locator("#mock-status")).to_have_value("202")
+    
+    # Check if jitter is still enabled in the form
+    expect(page.locator("#mock-jitter-enabled")).to_be_checked()
+    expect(page.locator("#mock-jitter-status")).to_have_value("500")
+    
+    # Modify something and save
+    page.locator("#mock-status").fill("201")
+    page.get_by_role("button", name="Save Mock").click()
+    
+    # Verify update
+    expect(page.locator(".card").filter(has_text="Return 201")).to_be_visible()
+
+    # 7. Delete Mock
     page.once("dialog", lambda dialog: dialog.accept()) # Handle confirm delete
     page.get_by_role("button", name="Delete").first.click()
     
@@ -99,5 +118,43 @@ def test_non_json_response(page: Page):
     page.get_by_role("button", name="Close").click()
     
     # Cleanup
+    page.once("dialog", lambda dialog: dialog.accept())
+    page.get_by_role("button", name="Delete").first.click()
+
+def test_jitter_full_features(page: Page):
+    page.goto(BASE_URL)
+    
+    # Create a mock with full jitter features
+    page.get_by_role("button", name="+ Create Mock").click()
+    page.locator("#mock-path").fill("/jitter-advanced")
+    
+    page.click("#btn-toggle-advanced")
+    page.locator("label.switch").click() # Enable jitter
+    
+    page.locator("#mock-jitter-prob").fill("100") # Always trigger for test
+    page.locator("#mock-jitter-status").fill("418")
+    
+    # Jitter header
+    page.get_by_role("button", name="+ Add Jitter Header").click()
+    page.locator("#jitter-settings .header-key").first.fill("X-Jitter-Type")
+    page.locator("#jitter-settings .header-value").first.fill("intermittent")
+    
+    # Jitter body type and content
+    page.locator("#mock-jitter-body-type").select_option("text")
+    page.locator("#mock-jitter-body").fill("Jitter Error Page")
+    page.locator("#mock-jitter-latency").fill("50")
+    
+    page.get_by_role("button", name="Save Mock").click()
+    
+    # Edit it to make sure hydration works for jitter headers/body/latency
+    page.get_by_role("button", name="Edit").first.click()
+    expect(page.locator("#mock-jitter-status")).to_have_value("418")
+    expect(page.locator("#mock-jitter-latency")).to_have_value("50")
+    expect(page.locator("#mock-jitter-body")).to_have_value("Jitter Error Page")
+    expect(page.locator("#jitter-settings .header-key")).to_have_value("X-Jitter-Type")
+    
+    page.get_by_role("button", name="Save Mock").click()
+    
+    # Clean up
     page.once("dialog", lambda dialog: dialog.accept())
     page.get_by_role("button", name="Delete").first.click()

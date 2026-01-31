@@ -307,29 +307,29 @@ async fn handle_request(State(state): State<Arc<AppState>>, req: Request) -> Res
     if let Some(exp) = matched {
         tracing::info!("Matched expectation: {}", exp.id);
 
-        if let Some(latency) = exp.response.latency
+        if let Some(latency) = exp.response.response.latency
             && latency > 0
         {
             tracing::info!("Applying latency delay: {}ms", latency);
             tokio::time::sleep(std::time::Duration::from_millis(latency)).await;
         }
 
-        if let Some(jitter_res) = apply_jitter(&exp.response, path, &body_json) {
+        if let Some(jitter_res) = apply_jitter(&exp.response, path, &body_json, headers).await {
             return jitter_res;
         }
 
-        let status =
-            StatusCode::from_u16(exp.response.status_code.unwrap_or(200)).unwrap_or(StatusCode::OK);
+        let status = StatusCode::from_u16(exp.response.response.status_code.unwrap_or(200))
+            .unwrap_or(StatusCode::OK);
         let mut response_builder = Response::builder().status(status);
 
-        if let Some(ref res_headers) = exp.response.headers {
+        if let Some(ref res_headers) = exp.response.response.headers {
             for (key, value) in res_headers {
                 response_builder = response_builder.header(key, value);
             }
         }
 
         let response_body = build_response_body(
-            &exp.response,
+            &exp.response.response,
             path,
             &body_json,
             headers,
@@ -356,32 +356,42 @@ async fn handle_request(State(state): State<Arc<AppState>>, req: Request) -> Res
     }
 }
 
-fn apply_jitter(
+async fn apply_jitter(
     res_config: &models::MockResponse,
     path: &str,
     body_json: &Option<Value>,
+    request_headers: &header::HeaderMap,
 ) -> Option<Response> {
     let jitter = res_config.jitter.as_ref()?;
     let random: f64 = rand::random();
 
     if random < jitter.probability {
-        tracing::info!(
-            "Jitter matched! Returning error response ({} status)",
-            jitter.status_code
-        );
-        let status =
-            StatusCode::from_u16(jitter.status_code).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+        tracing::info!("Jitter matched! Returning error response");
+
+        if let Some(latency) = jitter.response.latency
+            && latency > 0
+        {
+            tracing::info!("Applying jitter latency delay: {}ms", latency);
+            tokio::time::sleep(std::time::Duration::from_millis(latency)).await;
+        }
+
+        let status = StatusCode::from_u16(jitter.response.status_code.unwrap_or(500))
+            .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
         let mut response_builder = Response::builder().status(status);
 
-        let body = if let Some(ref res_body) = jitter.body {
-            let body_str = serde_json::to_string(res_body).unwrap();
-            let path_segments: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
-            let resolved_body = templating::resolve_template(&body_str, &path_segments, body_json);
-            response_builder = response_builder.header(header::CONTENT_TYPE, "application/json");
-            Body::from(resolved_body)
-        } else {
-            Body::empty()
-        };
+        if let Some(ref res_headers) = jitter.response.headers {
+            for (key, value) in res_headers {
+                response_builder = response_builder.header(key, value);
+            }
+        }
+
+        let body = build_response_body(
+            &jitter.response,
+            path,
+            body_json,
+            request_headers,
+            &mut response_builder,
+        );
 
         return Some(response_builder.body(body).unwrap());
     }
@@ -389,7 +399,7 @@ fn apply_jitter(
 }
 
 fn build_response_body(
-    res_config: &models::MockResponse,
+    res_config: &models::ResponseConfig,
     path: &str,
     body_json: &Option<Value>,
     request_headers: &header::HeaderMap,
