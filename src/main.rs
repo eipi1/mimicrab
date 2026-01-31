@@ -5,16 +5,19 @@ mod templating;
 
 use arc_swap::ArcSwap;
 use axum::body::Body;
+use axum::body::Bytes;
+use axum::http;
 use axum::{
     Json, Router,
     extract::{Path as AxPath, Request, State},
-    http::{StatusCode, header},
+    http::{HeaderMap, StatusCode, header},
     response::{
         IntoResponse, Response,
         sse::{Event, Sse},
     },
     routing::{get, post, put},
 };
+use clap::Parser;
 use futures::stream::Stream;
 use http_body_util::BodyExt;
 use kube::Client;
@@ -25,6 +28,13 @@ use std::{convert::Infallible, fs, sync::Arc};
 use tokio::sync::broadcast;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::EnvFilter;
+
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    #[arg(short, long, default_value_t = 3000)]
+    port: u16,
+}
 #[derive(Clone, Debug, serde::Serialize)]
 struct LogEntry {
     timestamp: String,
@@ -41,6 +51,7 @@ struct AppState {
     kube_client: Option<Client>,
     config_map_name: String,
     namespace: String,
+    proxy_client: reqwest::Client,
 }
 
 #[derive(RustEmbed)]
@@ -80,12 +91,21 @@ async fn main() {
 
     let expectations = Arc::new(ArcSwap::from_pointee(initial_expectations));
 
+    let args = Args::parse();
+    let port = args.port;
+
+    let proxy_client = reqwest::Client::builder()
+        .user_agent("mimicrab/0.1.0")
+        .build()
+        .unwrap();
+
     let state = Arc::new(AppState {
         expectations: Arc::clone(&expectations),
         log_tx,
         kube_client,
         config_map_name,
         namespace,
+        proxy_client,
     });
 
     if let Some(ref client) = state.kube_client {
@@ -117,8 +137,9 @@ async fn main() {
         .layer(TraceLayer::new_for_http())
         .with_state(state);
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
-    tracing::info!("Mock server running on http://localhost:3000");
+    let addr = format!("0.0.0.0:{}", port);
+    let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
+    tracing::info!("Mock server running on http://{}", addr);
     axum::serve(listener, app).await.unwrap();
 }
 
@@ -307,6 +328,19 @@ async fn handle_request(State(state): State<Arc<AppState>>, req: Request) -> Res
     if let Some(exp) = matched {
         tracing::info!("Matched expectation: {}", exp.id);
 
+        if let Some(ref proxy_config) = exp.response.proxy {
+            tracing::info!("Proxying request to: {}", proxy_config.url);
+            return forward_to_upstream(
+                &state,
+                proxy_config,
+                parts.method,
+                parts.uri,
+                parts.headers,
+                body_bytes,
+            )
+            .await;
+        }
+
         if let Some(latency) = exp.response.response.latency
             && latency > 0
         {
@@ -353,6 +387,76 @@ async fn handle_request(State(state): State<Arc<AppState>>, req: Request) -> Res
             })),
         )
             .into_response()
+    }
+}
+
+async fn forward_to_upstream(
+    state: &AppState,
+    proxy_config: &models::ProxyConfig,
+    method: http::Method,
+    uri: http::Uri,
+    mut headers: HeaderMap,
+    body_bytes: Bytes,
+) -> Response {
+    let path_and_query = uri
+        .path_and_query()
+        .map(|pq: &http::uri::PathAndQuery| pq.as_str())
+        .unwrap_or("");
+
+    let url = format!(
+        "{}{}",
+        proxy_config.url.trim_end_matches('/'),
+        path_and_query
+    );
+
+    // Overlay override headers
+    if let Some(ref overrides) = proxy_config.headers {
+        for (k, v) in overrides {
+            if let Ok(name) = header::HeaderName::from_bytes(k.as_bytes())
+                && let Ok(value) = header::HeaderValue::from_str(v)
+            {
+                headers.insert(name, value);
+            }
+        }
+    }
+
+    let mut proxy_req = state.proxy_client.request(method, url).headers(headers);
+
+    if !body_bytes.is_empty() {
+        proxy_req = proxy_req.body(body_bytes);
+    }
+
+    match proxy_req.send().await {
+        Ok(res) => {
+            let status = StatusCode::from_u16(res.status().as_u16()).unwrap_or(StatusCode::OK);
+            let mut response_builder = Response::builder().status(status);
+
+            for (name, value) in res.headers() {
+                response_builder = response_builder.header(name, value);
+            }
+
+            let body_bytes = match res.bytes().await {
+                Ok(b) => b,
+                Err(e) => {
+                    tracing::error!("Failed to read upstream response body: {}", e);
+                    return (
+                        StatusCode::BAD_GATEWAY,
+                        "Failed to read upstream response body",
+                    )
+                        .into_response();
+                }
+            };
+
+            response_builder.body(Body::from(body_bytes)).unwrap()
+        }
+        Err(e) => {
+            tracing::error!("Proxy request failed: {}", e);
+            (
+                StatusCode::BAD_GATEWAY,
+                format!("Proxy request failed: {}", e),
+            )
+                .into_response()
+        }
     }
 }
 

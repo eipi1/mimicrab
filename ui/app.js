@@ -29,6 +29,10 @@ const jitterToggle = document.getElementById('mock-jitter-enabled');
 const jitterSettings = document.getElementById('jitter-settings');
 const jitterHeadersContainer = document.getElementById('jitter-headers-container');
 const btnAddJitterHeader = document.getElementById('btn-add-jitter-header');
+const proxyToggle = document.getElementById('mock-proxy-enabled');
+const proxySettings = document.getElementById('proxy-settings');
+const proxyHeadersContainer = document.getElementById('proxy-headers-container');
+const btnAddProxyHeader = document.getElementById('btn-add-proxy-header');
 
 // Test Result Modal Elements
 const testModal = document.getElementById('test-modal');
@@ -308,6 +312,7 @@ function openModal(mock = null, isClone = false) {
     headersContainer.innerHTML = '';
     reqHeadersContainer.innerHTML = '';
     jitterHeadersContainer.innerHTML = '';
+    proxyHeadersContainer.innerHTML = '';
 
     if (mock) {
         document.getElementById('mock-id').value = isClone ? '' : mock.id;
@@ -349,6 +354,24 @@ function openModal(mock = null, isClone = false) {
             jitterSettings.classList.add('disabled');
         }
 
+        // Proxy
+        if (mock.response.proxy) {
+            proxyToggle.checked = true;
+            proxySettings.classList.remove('disabled');
+            document.getElementById('mock-proxy-url').value = mock.response.proxy.url || '';
+
+            // Proxy headers
+            if (mock.response.proxy.headers) {
+                Object.entries(mock.response.proxy.headers).forEach(([key, value]) => {
+                    addHeaderRow(proxyHeadersContainer, key, value);
+                });
+            }
+        } else {
+            proxyToggle.checked = false;
+            proxySettings.classList.add('disabled');
+            document.getElementById('mock-proxy-url').value = '';
+        }
+
         // Response Body
         const resBody = mock.response.body;
         if (resBody !== undefined && resBody !== null) {
@@ -384,6 +407,9 @@ function openModal(mock = null, isClone = false) {
         document.getElementById('mock-jitter-latency').value = 0;
         jitterToggle.checked = false;
         jitterSettings.classList.add('disabled');
+        proxyToggle.checked = false;
+        proxySettings.classList.add('disabled');
+        document.getElementById('mock-proxy-url').value = '';
     }
 
     // Reset validation states
@@ -422,6 +448,7 @@ function setupEventListeners() {
     btnAddHeader.onclick = () => addHeaderRow(headersContainer);
     btnAddReqHeader.onclick = () => addHeaderRow(reqHeadersContainer);
     btnAddJitterHeader.onclick = () => addHeaderRow(jitterHeadersContainer);
+    btnAddProxyHeader.onclick = () => addHeaderRow(proxyHeadersContainer);
 
     btnToggleAdvanced.onclick = () => {
         const isShown = advancedSection.classList.toggle('show');
@@ -431,8 +458,20 @@ function setupEventListeners() {
     jitterToggle.onchange = (e) => {
         if (e.target.checked) {
             jitterSettings.classList.remove('disabled');
+            proxyToggle.checked = false;
+            proxySettings.classList.add('disabled');
         } else {
             jitterSettings.classList.add('disabled');
+        }
+    };
+
+    proxyToggle.onchange = (e) => {
+        if (e.target.checked) {
+            proxySettings.classList.remove('disabled');
+            jitterToggle.checked = false;
+            jitterSettings.classList.add('disabled');
+        } else {
+            proxySettings.classList.add('disabled');
         }
     };
 
@@ -588,6 +627,22 @@ function setupEventListeners() {
             };
         }
 
+        const proxyEnabled = proxyToggle.checked;
+        let proxyConfig = undefined;
+        if (proxyEnabled) {
+            const proxyHeaders = {};
+            proxyHeadersContainer.querySelectorAll('.header-row').forEach(row => {
+                const key = row.querySelector('.header-key').value.trim();
+                const value = row.querySelector('.header-value').value.trim();
+                if (key) proxyHeaders[key] = value;
+            });
+
+            proxyConfig = {
+                url: document.getElementById('mock-proxy-url').value.trim(),
+                headers: Object.keys(proxyHeaders).length > 0 ? proxyHeaders : undefined
+            };
+        }
+
         const mock = {
             id: idVal ? parseInt(idVal) : Math.floor(Math.random() * 1000000),
             condition: {
@@ -600,6 +655,7 @@ function setupEventListeners() {
                 status_code: parseInt(document.getElementById('mock-status').value),
                 latency: latencyVal ? parseInt(latencyVal) : undefined,
                 jitter: jitterConfig,
+                proxy: proxyConfig,
                 headers: Object.keys(responseHeaders).length > 0 ? responseHeaders : undefined,
                 body: responseBody,
                 body_type: bodyType

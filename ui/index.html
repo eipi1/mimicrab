@@ -150,17 +150,30 @@
                 </div>
 
                 <div id="advanced-options" class="advanced-section">
-                    <div class="jitter-control">
-                        <div class="form-group checkbox-group">
-                            <label class="switch">
-                                <input type="checkbox" id="mock-jitter-enabled">
-                                <span class="slider round"></span>
-                            </label>
-                            <span>Enable Jitter (Random Errors)</span>
+                    <div class="advanced-toggles">
+                        <div class="jitter-control">
+                            <div class="form-group checkbox-group">
+                                <label class="switch">
+                                    <input type="checkbox" id="mock-jitter-enabled">
+                                    <span class="slider round"></span>
+                                </label>
+                                <span>Enable Jitter</span>
+                            </div>
+                        </div>
+
+                        <div class="proxy-control">
+                            <div class="form-group checkbox-group">
+                                <label class="switch">
+                                    <input type="checkbox" id="mock-proxy-enabled">
+                                    <span class="slider round"></span>
+                                </label>
+                                <span>Enable Proxying</span>
+                            </div>
                         </div>
                     </div>
 
                     <div id="jitter-settings" class="jitter-settings disabled">
+                        <div class="advanced-divider"><span>Jitter Settings</span></div>
                         <div class="form-row">
                             <div class="form-group half">
                                 <label for="mock-jitter-prob">Error Probability (%)</label>
@@ -202,6 +215,25 @@
                         <div class="form-group">
                             <label for="mock-jitter-latency">Jitter Latency (ms)</label>
                             <input type="number" id="mock-jitter-latency" value="0" min="0">
+                        </div>
+                    </div>
+
+                    <div id="proxy-settings" class="proxy-settings disabled">
+                        <div class="advanced-divider"><span>Proxy Settings</span></div>
+                        <div class="form-group">
+                            <label for="mock-proxy-url">Upstream URL</label>
+                            <input type="text" id="mock-proxy-url" placeholder="https://api.example.com">
+                            <small class="form-help">Matched requests will be forwarded to this URL. Original path and
+                                query will be appended.</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Proxy Header Overrides</label>
+                            <div id="proxy-headers-container" class="headers-container">
+                                <!-- Rows added dynamically -->
+                            </div>
+                            <button type="button" class="btn btn-secondary btn-sm" id="btn-add-proxy-header">+ Add Proxy
+                                Header Override</button>
                         </div>
                     </div>
                 </div>

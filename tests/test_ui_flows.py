@@ -28,7 +28,7 @@ def test_dashboard_full_flow(page: Page):
     page.locator("#mock-latency").fill("100")
     
     # Jitter - interaction with styled switch
-    page.locator("label.switch").click() # Click the slider container
+    page.locator(".jitter-control label.switch").click() # Click the slider container
     page.locator("#mock-jitter-prob").fill("10")
     page.locator("#mock-jitter-status").fill("500")
     page.locator("#mock-jitter-body").fill('{"error": "jitter"}')
@@ -129,7 +129,7 @@ def test_jitter_full_features(page: Page):
     page.locator("#mock-path").fill("/jitter-advanced")
     
     page.click("#btn-toggle-advanced")
-    page.locator("label.switch").click() # Enable jitter
+    page.locator(".jitter-control label.switch").click() # Enable jitter
     
     page.locator("#mock-jitter-prob").fill("100") # Always trigger for test
     page.locator("#mock-jitter-status").fill("418")
@@ -158,3 +158,62 @@ def test_jitter_full_features(page: Page):
     # Clean up
     page.once("dialog", lambda dialog: dialog.accept())
     page.get_by_role("button", name="Delete").first.click()
+
+def test_proxy_ui(page: Page):
+    page.goto(BASE_URL)
+    
+    # Create a mock with Proxy settings
+    page.get_by_role("button", name="+ Create Mock").click()
+    page.locator("#mock-path").fill("/proxy-ui-test")
+    
+    page.click("#btn-toggle-advanced")
+    # Enable proxying (it's the second switch in the advanced-toggles)
+    page.locator(".proxy-control .switch").click()
+    
+    page.locator("#mock-proxy-url").fill("https://api.github.com/users/octocat")
+    
+    # Add a proxy header override
+    page.get_by_role("button", name="+ Add Proxy Header Override").click()
+    page.locator("#proxy-settings .header-key").first.fill("Accept")
+    page.locator("#proxy-settings .header-value").first.fill("application/vnd.github.v3+json")
+    
+    page.get_by_role("button", name="Save Mock").click()
+    
+    # Edit it to verify hydration
+    page.get_by_role("button", name="Edit").first.click()
+    expect(page.locator("#mock-proxy-enabled")).to_be_checked()
+    expect(page.locator("#mock-proxy-url")).to_have_value("https://api.github.com/users/octocat")
+    expect(page.locator("#proxy-settings .header-key")).to_have_value("Accept")
+    
+    page.get_by_role("button", name="Save Mock").click()
+    
+    # Clean up
+    page.once("dialog", lambda dialog: dialog.accept())
+    page.get_by_role("button", name="Delete").first.click()
+
+def test_jitter_proxy_mutual_exclusivity(page: Page):
+    page.goto(BASE_URL)
+    page.get_by_role("button", name="+ Create Mock").click()
+    page.click("#btn-toggle-advanced")
+    
+    # 1. Enable Jitter
+    page.locator(".jitter-control .switch").click()
+    expect(page.locator("#mock-jitter-enabled")).to_be_checked()
+    expect(page.locator("#jitter-settings")).not_to_have_class("disabled")
+    
+    # 2. Enable Proxy (should disable Jitter)
+    page.locator(".proxy-control .switch").click()
+    expect(page.locator("#mock-proxy-enabled")).to_be_checked()
+    expect(page.locator("#proxy-settings")).not_to_have_class("disabled")
+    expect(page.locator("#mock-jitter-enabled")).not_to_be_checked()
+    # In my CSS, .disabled uses display: none, but ClassList.toggle('disabled') should work
+    expect(page.locator("#jitter-settings")).to_have_class("jitter-settings disabled")
+    
+    # 3. Enable Jitter again (should disable Proxy)
+    page.locator(".jitter-control .switch").click()
+    expect(page.locator("#mock-jitter-enabled")).to_be_checked()
+    expect(page.locator("#jitter-settings")).not_to_have_class("disabled")
+    expect(page.locator("#mock-proxy-enabled")).not_to_be_checked()
+    expect(page.locator("#proxy-settings")).to_have_class("proxy-settings disabled")
+    
+    page.click("#btn-cancel-modal")

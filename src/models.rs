@@ -26,10 +26,17 @@ pub struct JitterConfig {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ProxyConfig {
+    pub url: String,
+    pub headers: Option<HashMap<String, String>>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct MockResponse {
     #[serde(flatten)]
     pub response: ResponseConfig,
     pub jitter: Option<JitterConfig>,
+    pub proxy: Option<ProxyConfig>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

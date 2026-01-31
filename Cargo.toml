@@ -25,6 +25,7 @@ bson = "2"
 rust-embed = { version = "8", features = ["axum"] }
 mime_guess = "2.0"
 rand = "0.9.2"
+reqwest = { version = "0.13", features = ["json"] }
+clap = { version = "4", features = ["derive"] }
 
 [dev-dependencies]
-reqwest = { version = "0.13", features = ["json"] }

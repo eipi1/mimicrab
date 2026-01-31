@@ -8,8 +8,12 @@ struct TestServer {
 }
 
 impl TestServer {
-    fn start() -> Self {
-        let child = Command::new("target/debug/mimicrab")
+    fn start(port: Option<u16>) -> Self {
+        let mut cmd = Command::new("target/debug/mimicrab");
+        if let Some(p) = port {
+            cmd.arg("--port").arg(p.to_string());
+        }
+        let child = cmd
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn()
@@ -51,7 +55,7 @@ async fn wait_for_server(base_url: &str) {
 
 #[tokio::test]
 async fn test_full_mock_lifecycle() -> Result<(), Box<dyn std::error::Error>> {
-    let _server = TestServer::start();
+    let _server = TestServer::start(None);
     let base_url = "http://localhost:3000";
     wait_for_server(base_url).await;
 
@@ -147,7 +151,7 @@ async fn test_full_mock_lifecycle() -> Result<(), Box<dyn std::error::Error>> {
 
 #[tokio::test]
 async fn test_import_mocks() -> Result<(), Box<dyn std::error::Error>> {
-    let _server = TestServer::start();
+    let _server = TestServer::start(None);
     let base_url = "http://localhost:3000";
     wait_for_server(base_url).await;
 
@@ -187,7 +191,7 @@ async fn test_import_mocks() -> Result<(), Box<dyn std::error::Error>> {
 
 #[tokio::test]
 async fn test_mock_latency() -> Result<(), Box<dyn std::error::Error>> {
-    let _server = TestServer::start();
+    let _server = TestServer::start(None);
     let base_url = "http://localhost:3000";
     wait_for_server(base_url).await;
 
@@ -231,7 +235,7 @@ async fn test_mock_latency() -> Result<(), Box<dyn std::error::Error>> {
 
 #[tokio::test]
 async fn test_mock_jitter() -> Result<(), Box<dyn std::error::Error>> {
-    let _server = TestServer::start();
+    let _server = TestServer::start(None);
     let base_url = "http://localhost:3000";
     wait_for_server(base_url).await;
 
@@ -299,6 +303,59 @@ async fn test_mock_jitter() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(res.status(), 200);
     let body: Value = res.json().await?;
     assert_eq!(body["ok"], true);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_mock_proxy() -> Result<(), Box<dyn std::error::Error>> {
+    // 1. Start Upstream on 3001
+    let _upstream = TestServer::start(Some(3001));
+    wait_for_server("http://localhost:3001").await;
+
+    // 2. Start Primary on 3002
+    let _primary = TestServer::start(Some(3002));
+    wait_for_server("http://localhost:3002").await;
+
+    let client = reqwest::Client::new();
+
+    // 3. Configure Upstream to return a specific response
+    client
+        .post("http://localhost:3001/_admin/mocks")
+        .json(&json!({
+            "id": 1,
+            "condition": { "method": "GET", "path": "/proxy-test" },
+            "response": { "status_code": 200, "body": { "from": "upstream" } }
+        }))
+        .send()
+        .await?;
+
+    // 4. Configure Primary to proxy to Upstream with header override
+    client
+        .post("http://localhost:3002/_admin/mocks")
+        .json(&json!({
+            "id": 2,
+            "condition": { "method": "GET", "path": "/proxy-test" },
+            "response": {
+                "proxy": {
+                    "url": "http://localhost:3001",
+                    "headers": { "X-Proxy-Overridden": "true", "User-Agent": "mimicrab-test" }
+                }
+            }
+        }))
+        .send()
+        .await?;
+
+    // 5. Verify proxying works
+    let res = client
+        .get("http://localhost:3002/proxy-test")
+        .header("User-Agent", "original-agent")
+        .send()
+        .await?;
+
+    assert_eq!(res.status(), 200);
+    let body: Value = res.json().await?;
+    assert_eq!(body["from"], "upstream");
 
     Ok(())
 }

@@ -713,10 +713,45 @@ textarea:focus {
     }
 }
 
-.jitter-settings.disabled {
-    opacity: 0.5;
-    pointer-events: none;
-    filter: grayscale(1);
+.advanced-toggles {
+    display: flex;
+    gap: 2rem;
+    margin-bottom: 1.2rem;
+    padding-bottom: 1.2rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.advanced-divider {
+    display: flex;
+    align-items: center;
+    margin: 1.5rem 0 1rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--accent-primary);
+}
+
+.advanced-divider::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(to right, var(--accent-primary), transparent);
+    margin-left: 1rem;
+    opacity: 0.3;
+}
+
+.jitter-settings.disabled,
+.proxy-settings.disabled {
+    display: none;
+}
+
+.form-help {
+    display: block;
+    margin-top: 0.4rem;
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    line-height: 1.4;
 }
 
 .checkbox-group {
