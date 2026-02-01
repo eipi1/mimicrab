@@ -37,6 +37,7 @@ pub struct MockResponse {
     pub response: ResponseConfig,
     pub jitter: Option<JitterConfig>,
     pub proxy: Option<ProxyConfig>,
+    pub script: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

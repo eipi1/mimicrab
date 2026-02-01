@@ -27,5 +27,6 @@ mime_guess = "2.0"
 rand = "0.9.2"
 reqwest = { version = "0.13", features = ["json"] }
 clap = { version = "4", features = ["derive"] }
+mlua = { version = "0.9", features = ["lua54", "serialize"] }
 
 [dev-dependencies]

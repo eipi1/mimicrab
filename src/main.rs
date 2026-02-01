@@ -21,6 +21,7 @@ use clap::Parser;
 use futures::stream::Stream;
 use http_body_util::BodyExt;
 use kube::Client;
+use mlua::{Lua, LuaSerdeExt, Table, Value as LuaValue};
 use models::Expectation;
 use rust_embed_for_web::{EmbedableFile, RustEmbed};
 use serde_json::{Value, json};
@@ -337,6 +338,84 @@ async fn static_handler(path: Option<AxPath<String>>, headers: HeaderMap) -> Res
     }
 }
 
+async fn execute_lua_script(
+    script: &str,
+    method: &str,
+    path: &str,
+    headers: &HeaderMap,
+    body: &Option<Value>,
+) -> Result<Response, String> {
+    let lua = Lua::new();
+
+    // Prepare request table
+    let req_table = lua.create_table().map_err(|e| e.to_string())?;
+    req_table.set("method", method).map_err(|e| e.to_string())?;
+    req_table.set("path", path).map_err(|e| e.to_string())?;
+
+    let headers_table = lua.create_table().map_err(|e| e.to_string())?;
+    for (name, value) in headers.iter() {
+        headers_table
+            .set(name.as_str(), value.to_str().unwrap())
+            .map_err(|e| e.to_string())?;
+    }
+    req_table
+        .set("headers", headers_table)
+        .map_err(|e| e.to_string())?;
+
+    if let Some(body_val) = body {
+        let body_lua = lua.to_value(body_val).map_err(|e| e.to_string())?;
+        req_table.set("body", body_lua).map_err(|e| e.to_string())?;
+    }
+
+    dbg!(&req_table);
+
+    lua.globals()
+        .set("request", req_table)
+        .map_err(|e| e.to_string())?;
+
+    // Execute script
+    let chunk = lua.load(script);
+    let result: LuaValue = chunk.eval().map_err(|e| e.to_string())?;
+
+    // Map result to Response
+    if let LuaValue::Table(res_table) = result {
+        let status: u16 = res_table.get("status").unwrap_or(200);
+        let mut builder =
+            Response::builder().status(StatusCode::from_u16(status).unwrap_or(StatusCode::OK));
+
+        if let Ok(headers_table) = res_table.get::<_, Table>("headers") {
+            for (k, v) in headers_table.pairs::<String, String>().flatten() {
+                builder = builder.header(k, v);
+            }
+        }
+
+        let body_bytes = if let Ok(body_val) = res_table.get::<_, LuaValue>("body") {
+            match body_val {
+                LuaValue::String(s) => s.as_bytes().to_vec(),
+                LuaValue::Table(t) => {
+                    let json_val: Value = lua
+                        .from_value(LuaValue::Table(t))
+                        .map_err(|e| e.to_string())?;
+                    serde_json::to_vec(&json_val).unwrap_or_default()
+                }
+                _ => vec![],
+            }
+        } else {
+            vec![]
+        };
+
+        Ok(builder.body(Body::from(body_bytes)).unwrap_or_else(|_| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to build response",
+            )
+                .into_response()
+        }))
+    } else {
+        Err("Script must return a table".to_string())
+    }
+}
+
 async fn handle_request(State(state): State<Arc<AppState>>, req: Request) -> Response {
     let (parts, body) = req.into_parts();
     let path = parts.uri.path();
@@ -369,6 +448,21 @@ async fn handle_request(State(state): State<Arc<AppState>>, req: Request) -> Res
 
     if let Some(exp) = matched {
         tracing::info!("Matched expectation: {}", exp.id);
+
+        if let Some(ref script) = exp.response.script {
+            tracing::info!("Executing Lua script for mock {}", exp.id);
+            match execute_lua_script(script, method.as_str(), path, headers, &body_json).await {
+                Ok(res) => return res,
+                Err(e) => {
+                    tracing::error!("Lua execution failed: {}", e);
+                    return (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Lua error: {}", e),
+                    )
+                        .into_response();
+                }
+            }
+        }
 
         if let Some(ref proxy_config) = exp.response.proxy {
             tracing::info!("Proxying request to: {}", proxy_config.url);

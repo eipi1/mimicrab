@@ -421,3 +421,106 @@ async fn test_static_asset_caching_and_compression() -> Result<(), Box<dyn std::
 
     Ok(())
 }
+
+#[tokio::test]
+async fn test_mock_with_lua_script() -> Result<(), Box<dyn std::error::Error>> {
+    let _server = TestServer::start(Some(3004));
+    wait_for_server("http://localhost:3004").await;
+
+    let client = reqwest::Client::new();
+
+    // Configure mock with Lua script
+    let script = r#"
+        local res = {
+            status = 201,
+            headers = {
+                ["X-Lua-Generated"] = "true",
+                ["Content-Type"] = "application/json"
+            },
+            body = {
+                received_method = request.method,
+                received_path = request.path,
+                received_header = request.headers["x-test-header"],
+                received_body = request.body
+            }
+        }
+        return res
+    "#;
+
+    client
+        .post("http://localhost:3004/_admin/mocks")
+        .json(&json!({
+            "id": 1,
+            "condition": { "method": "POST", "path": "/lua-test" },
+            "response": {
+                "script": script
+            }
+        }))
+        .send()
+        .await?;
+
+    // Test the mock
+    let res = client
+        .post("http://localhost:3004/lua-test")
+        .header("X-Test-Header", "lua-val")
+        .json(&json!({ "input": "data" }))
+        .send()
+        .await?;
+
+    assert_eq!(res.status(), 201);
+    assert_eq!(res.headers().get("X-Lua-Generated").unwrap(), "true");
+
+    let body: Value = res.json().await?;
+    assert_eq!(body["received_method"], "POST");
+    assert_eq!(body["received_path"], "/lua-test");
+    assert_eq!(body["received_header"], "lua-val");
+    assert_eq!(body["received_body"]["input"], "data");
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_templated_body_array() -> Result<(), Box<dyn std::error::Error>> {
+    let _server = TestServer::start(Some(3005));
+    wait_for_server("http://localhost:3005").await;
+
+    let client = reqwest::Client::new();
+
+    // Create a mock that uses body array access
+    client
+        .post("http://localhost:3005/_admin/mocks")
+        .json(&json!({
+            "id": 1,
+            "condition": { "method": "POST", "path": "/array-test" },
+            "response": {
+                "status_code": 200,
+                "body": {
+                    "first_name": "{{body[0].name}}",
+                    "second_id": "{{body[1].id}}",
+                    "deep": "{{body[1].tags[0]}}",
+                    "path_0": "{{path[0]}}"
+                }
+            }
+        }))
+        .send()
+        .await?;
+
+    // Test with array in body
+    let res = client
+        .post("http://localhost:3005/array-test")
+        .json(&json!([
+            { "id": 101, "name": "Alice" },
+            { "id": 102, "name": "Bob", "tags": ["tag1", "tag2"] }
+        ]))
+        .send()
+        .await?;
+
+    assert_eq!(res.status(), 200);
+    let body: Value = res.json().await?;
+    assert_eq!(body["first_name"], "Alice");
+    assert_eq!(body["second_id"], "102");
+    assert_eq!(body["deep"], "tag1");
+    assert_eq!(body["path_0"], "array-test");
+
+    Ok(())
+}
