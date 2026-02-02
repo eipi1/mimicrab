@@ -20,7 +20,7 @@ use axum::{
 use clap::Parser;
 use futures::stream::Stream;
 use http_body_util::BodyExt;
-use kube::Client;
+use kube::{Client, Config};
 use mlua::{Lua, LuaSerdeExt, Table, Value as LuaValue};
 use models::Expectation;
 use rust_embed_for_web::{EmbedableFile, RustEmbed};
@@ -74,6 +74,9 @@ async fn main() {
     let is_k8s = std::env::var("KUBERNETES_SERVICE_HOST").is_ok();
     let kube_client = if is_k8s {
         tracing::info!("Mimicrab starting in KUBERNETES mode");
+        if let Ok(config) = Config::infer().await {
+            tracing::info!("Using Kubernetes config: {:?}", config);
+        }
         Client::try_default().await.ok()
     } else {
         tracing::info!("Mimicrab starting in LOCAL mode");
@@ -290,7 +293,7 @@ async fn static_handler(path: Option<AxPath<String>>, headers: HeaderMap) -> Res
         Some(content) => {
             // Cache validation
             if let Some(if_none_match) = headers.get(header::IF_NONE_MATCH)
-                && if_none_match == content.etag()
+                && *if_none_match == *content.etag()
             {
                 return StatusCode::NOT_MODIFIED.into_response();
             }

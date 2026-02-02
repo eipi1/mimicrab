@@ -170,6 +170,32 @@
                                 <span>Enable Proxying</span>
                             </div>
                         </div>
+
+                        <div class="lua-control">
+                            <div class="form-group checkbox-group">
+                                <label class="switch">
+                                    <input type="checkbox" id="mock-lua-enabled">
+                                    <span class="slider round"></span>
+                                </label>
+                                <span>Enable Lua Scripting</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="lua-settings" class="lua-settings disabled">
+                        <div class="advanced-divider"><span>Lua Scripting</span></div>
+                        <div class="form-group">
+                            <label for="mock-lua-script">Lua Script</label>
+                            <small class="form-help">Variables available: <code>request.method</code>,
+                                <code>request.path</code>, <code>request.headers</code>,
+                                <code>request.body</code></small>
+                            <textarea id="mock-lua-script" class="code-editor" rows="8" placeholder='local res = {
+    status = 200,
+    headers = { ["Content-Type"] = "application/json" },
+    body = { message = "Hello from Lua!" }
+}
+return res'></textarea>
+                        </div>
                     </div>
 
                     <div id="jitter-settings" class="jitter-settings disabled">

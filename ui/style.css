@@ -698,24 +698,12 @@ textarea:focus {
 
 .advanced-section.show {
     display: block;
-    animation: slideDown 0.3s ease-out;
-}
-
-@keyframes slideDown {
-    from {
-        opacity: 0;
-        transform: translateY(-10px);
-    }
-
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
 }
 
 .advanced-toggles {
     display: flex;
-    gap: 2rem;
+    flex-wrap: wrap;
+    gap: 1rem 2rem;
     margin-bottom: 1.2rem;
     padding-bottom: 1.2rem;
     border-bottom: 1px solid var(--border-color);
@@ -811,4 +799,30 @@ input:checked+.slider:before {
 
 .slider.round:before {
     border-radius: 50%;
+}
+
+/* Lua Scripting Styles */
+.lua-settings.disabled {
+    display: none;
+}
+
+.lua-settings,
+.jitter-settings,
+.proxy-settings {
+    margin-top: 15px;
+    padding: 15px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    border-left: 3px solid var(--accent-primary);
+}
+
+.code-editor {
+    font-family: 'Fira Code', 'Courier New', Courier, monospace;
+    background: #1e1e1e !important;
+    color: #d4d4d4 !important;
+    padding: 12px;
+    line-height: 1.5;
+    tab-size: 4;
+    border: 1px solid #333;
+    font-size: 0.9rem;
 }

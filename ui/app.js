@@ -33,6 +33,9 @@ const proxyToggle = document.getElementById('mock-proxy-enabled');
 const proxySettings = document.getElementById('proxy-settings');
 const proxyHeadersContainer = document.getElementById('proxy-headers-container');
 const btnAddProxyHeader = document.getElementById('btn-add-proxy-header');
+const luaToggle = document.getElementById('mock-lua-enabled');
+const luaSettings = document.getElementById('lua-settings');
+const luaScript = document.getElementById('mock-lua-script');
 
 // Test Result Modal Elements
 const testModal = document.getElementById('test-modal');
@@ -372,6 +375,17 @@ function openModal(mock = null, isClone = false) {
             document.getElementById('mock-proxy-url').value = '';
         }
 
+        // Lua
+        if (mock.response.script) {
+            luaToggle.checked = true;
+            luaSettings.classList.remove('disabled');
+            luaScript.value = mock.response.script;
+        } else {
+            luaToggle.checked = false;
+            luaSettings.classList.add('disabled');
+            luaScript.value = '';
+        }
+
         // Response Body
         const resBody = mock.response.body;
         if (resBody !== undefined && resBody !== null) {
@@ -410,6 +424,9 @@ function openModal(mock = null, isClone = false) {
         proxyToggle.checked = false;
         proxySettings.classList.add('disabled');
         document.getElementById('mock-proxy-url').value = '';
+        luaToggle.checked = false;
+        luaSettings.classList.add('disabled');
+        luaScript.value = '';
     }
 
     // Reset validation states
@@ -460,6 +477,8 @@ function setupEventListeners() {
             jitterSettings.classList.remove('disabled');
             proxyToggle.checked = false;
             proxySettings.classList.add('disabled');
+            luaToggle.checked = false;
+            luaSettings.classList.add('disabled');
         } else {
             jitterSettings.classList.add('disabled');
         }
@@ -470,8 +489,22 @@ function setupEventListeners() {
             proxySettings.classList.remove('disabled');
             jitterToggle.checked = false;
             jitterSettings.classList.add('disabled');
+            luaToggle.checked = false;
+            luaSettings.classList.add('disabled');
         } else {
             proxySettings.classList.add('disabled');
+        }
+    };
+
+    luaToggle.onchange = (e) => {
+        if (e.target.checked) {
+            luaSettings.classList.remove('disabled');
+            jitterToggle.checked = false;
+            jitterSettings.classList.add('disabled');
+            proxyToggle.checked = false;
+            proxySettings.classList.add('disabled');
+        } else {
+            luaSettings.classList.add('disabled');
         }
     };
 
@@ -665,7 +698,8 @@ function setupEventListeners() {
                 proxy: proxyConfig,
                 headers: Object.keys(responseHeaders).length > 0 ? responseHeaders : undefined,
                 body: responseBody,
-                body_type: bodyType
+                body_type: bodyType,
+                script: luaToggle.checked ? luaScript.value.trim() : undefined
             }
         };
 

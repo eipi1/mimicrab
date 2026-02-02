@@ -5,6 +5,7 @@ FROM rust:1.93-slim-trixie AS builder
 RUN apt-get update && apt-get install -y \
     pkg-config \
     libssl-dev \
+    liblua5.4-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /usr/src/mimicrab
@@ -20,6 +21,7 @@ FROM debian:trixie-slim
 RUN apt-get update && apt-get install -y \
     ca-certificates \
     libssl3 \
+    liblua5.4-0 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /usr/local/bin
