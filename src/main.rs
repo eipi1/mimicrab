@@ -70,6 +70,10 @@ async fn main() {
     let expectations_path = "expectations.json";
     let (log_tx, _) = broadcast::channel(100);
 
+    let provider = rustls::crypto::ring::default_provider();
+    rustls::crypto::CryptoProvider::install_default(provider)
+        .expect("failed to install crypto provider");
+
     // Environment Detection
     let is_k8s = std::env::var("KUBERNETES_SERVICE_HOST").is_ok();
     let kube_client = if is_k8s {
