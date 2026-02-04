@@ -139,3 +139,28 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+  gh-pages:
+    runs-on: ubuntu-24.04
+    # Only run on master push, release, or manual trigger
+    if: |
+      github.event_name == 'push' && github.ref == 'refs/heads/master' ||
+      github.event_name == 'release' ||
+      github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install mdBook
+        run: |
+          mkdir mdbook
+          curl -sSL https://github.com/rust-lang/mdBook/releases/download/v0.4.21/mdbook-v0.4.21-x86_64-unknown-linux-gnu.tar.gz | tar -xz -C mdbook
+          echo "$(pwd)/mdbook" >> $GITHUB_PATH
+
+      - name: Build Documentation
+        run: |
+          cd book-src
+          mdbook build
+
