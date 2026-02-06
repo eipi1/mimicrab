@@ -33,5 +33,5 @@ curl -X POST http://localhost:3000/v1/login \
 }
 ```
 
-> [!TIP]
+> \[!TIP]
 > You can also use indices for path segments, such as `{{path[0]}}` for the first segment, `{{path[1]}}` for the second, and so on.

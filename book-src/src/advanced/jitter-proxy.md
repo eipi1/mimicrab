@@ -8,9 +8,9 @@ Jitter allows you to simulate unreliable network conditions for a specific mock.
 
 ### Configuration Options
 
-- **Delay (ms)**: Adds a fixed latency to the response.
-- **Random Delay (ms)**: Adds a random delay up to the specified maximum.
-- **Failure Rate (0.0 - 1.0)**: The probability that a request will fail with a 500 error instead of returning the mock response. For example, `0.1` means a 10% failure rate.
+- **Jitter Latency (ms)**: Adds a fixed latency to the response.
+- **Error Rate (0 - 100)**: The probability that a request will fail with a jitter response instead of returning the mock response.
+- **Error Status/Jitter Response: Set error response details
 
 ### Usage in UI
 
@@ -35,5 +35,5 @@ Proxying allows Mimicrab to act as a transparent intermediary. If a request does
 2. Toggle **Enable Proxying**.
 3. Enter the **Upstream URL**.
 
-> [!NOTE]
+> \[!NOTE]
 > Jitter, Proxying, and Lua Scripting are mutually exclusive for a single mock to ensure predictable behavior.
