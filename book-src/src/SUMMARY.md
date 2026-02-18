@@ -9,6 +9,7 @@
 - [Core Features](features/README.md)
     - [Request Matching](features/matching.md)
     - [Response Configuration](features/responses.md)
+    - [Prometheus Metrics](features/metrics.md)
 
 - [Advanced Features](advanced/README.md)
     - [Lua Scripting](advanced/lua-scripting.md)
@@ -23,3 +24,5 @@
 - [Deployment](deployment/README.md)
     - [Docker](deployment/docker.md)
     - [Kubernetes](deployment/kubernetes.md)
+
+- [Admin API](admin-api.md)

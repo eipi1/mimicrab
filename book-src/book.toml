@@ -10,7 +10,6 @@ build-dir = "../docs"
 
 [output.html]
 git-repository-url = "https://github.com/eipi1/mimicrab"
-edit-url-template = "https://github.com/eipi1/mimicrab/edit/main/book-src/{path}"
 
 [output.html.search]
 enable = true

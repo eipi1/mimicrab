@@ -29,6 +29,8 @@ reqwest = { version = "0.13", features = ["json"] }
 clap = { version = "4", features = ["derive"] }
 mlua = { version = "0.9", features = ["lua54", "serialize"] }
 rustls = "0.23"
+prometheus = { version = "0.13", features = ["process"] }
+lazy_static = "1.4"
 
 [dev-dependencies]
 #rust-embed-for-web = {version = "11.3"}

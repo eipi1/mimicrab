@@ -8,10 +8,13 @@ struct TestServer {
 }
 
 impl TestServer {
-    fn start(port: Option<u16>) -> Self {
+    fn start(port: Option<u16>, expectations: Option<&str>) -> Self {
         let mut cmd = Command::new("target/debug/mimicrab");
         if let Some(p) = port {
             cmd.arg("--port").arg(p.to_string());
+        }
+        if let Some(e) = expectations {
+            cmd.arg("--expectations").arg(e);
         }
         let child = cmd
             .stdout(Stdio::inherit())
@@ -55,13 +58,13 @@ async fn wait_for_server(base_url: &str) {
 
 #[tokio::test]
 async fn test_full_mock_lifecycle() -> Result<(), Box<dyn std::error::Error>> {
-    let _server = TestServer::start(None);
-    let base_url = "http://localhost:3000";
-    wait_for_server(base_url).await;
+    let port = 3020;
+    let _server = TestServer::start(Some(port), Some("expectations_lifecycle.json"));
+    let base_url = format!("http://localhost:{}", port);
+    wait_for_server(&base_url).await;
 
-    let client = reqwest::Client::new();
-    let base_url = "http://localhost:3000";
     let admin_url = format!("{}/_admin/mocks", base_url);
+    let client = reqwest::Client::new();
 
     // 1. List mocks (initially empty or some existing)
     let res = client.get(&admin_url).send().await?;
@@ -151,12 +154,12 @@ async fn test_full_mock_lifecycle() -> Result<(), Box<dyn std::error::Error>> {
 
 #[tokio::test]
 async fn test_import_mocks() -> Result<(), Box<dyn std::error::Error>> {
-    let _server = TestServer::start(None);
-    let base_url = "http://localhost:3000";
-    wait_for_server(base_url).await;
+    let port = 3021;
+    let _server = TestServer::start(Some(port), Some("expectations_import.json"));
+    let base_url = format!("http://localhost:{}", port);
+    wait_for_server(&base_url).await;
 
     let client = reqwest::Client::new();
-    let base_url = "http://localhost:3000";
     let import_url = format!("{}/_admin/import", base_url);
 
     let mocks_to_import = json!([
@@ -191,9 +194,10 @@ async fn test_import_mocks() -> Result<(), Box<dyn std::error::Error>> {
 
 #[tokio::test]
 async fn test_mock_latency() -> Result<(), Box<dyn std::error::Error>> {
-    let _server = TestServer::start(None);
-    let base_url = "http://localhost:3000";
-    wait_for_server(base_url).await;
+    let port = 3022;
+    let _server = TestServer::start(Some(port), Some("expectations_latency.json"));
+    let base_url = format!("http://localhost:{}", port);
+    wait_for_server(&base_url).await;
 
     let client = reqwest::Client::new();
     let admin_url = format!("{}/_admin/mocks", base_url);
@@ -235,9 +239,10 @@ async fn test_mock_latency() -> Result<(), Box<dyn std::error::Error>> {
 
 #[tokio::test]
 async fn test_mock_jitter() -> Result<(), Box<dyn std::error::Error>> {
-    let _server = TestServer::start(None);
-    let base_url = "http://localhost:3000";
-    wait_for_server(base_url).await;
+    let port = 3023;
+    let _server = TestServer::start(Some(port), Some("expectations_jitter.json"));
+    let base_url = format!("http://localhost:{}", port);
+    wait_for_server(&base_url).await;
 
     let client = reqwest::Client::new();
     let admin_url = format!("{}/_admin/mocks", base_url);
@@ -310,11 +315,11 @@ async fn test_mock_jitter() -> Result<(), Box<dyn std::error::Error>> {
 #[tokio::test]
 async fn test_mock_proxy() -> Result<(), Box<dyn std::error::Error>> {
     // 1. Start Upstream on 3001
-    let _upstream = TestServer::start(Some(3001));
+    let _upstream = TestServer::start(Some(3001), Some("expectations_upstream.json"));
     wait_for_server("http://localhost:3001").await;
 
     // 2. Start Primary on 3002
-    let _primary = TestServer::start(Some(3002));
+    let _primary = TestServer::start(Some(3002), Some("expectations_primary.json"));
     wait_for_server("http://localhost:3002").await;
 
     let client = reqwest::Client::new();
@@ -362,7 +367,7 @@ async fn test_mock_proxy() -> Result<(), Box<dyn std::error::Error>> {
 
 #[tokio::test]
 async fn test_static_asset_caching_and_compression() -> Result<(), Box<dyn std::error::Error>> {
-    let _server = TestServer::start(Some(3003));
+    let _server = TestServer::start(Some(3003), Some("expectations_static.json"));
     wait_for_server("http://localhost:3003").await;
 
     let client = reqwest::Client::new();
@@ -425,7 +430,7 @@ async fn test_static_asset_caching_and_compression() -> Result<(), Box<dyn std::
 
 #[tokio::test]
 async fn test_mock_with_lua_script() -> Result<(), Box<dyn std::error::Error>> {
-    let _server = TestServer::start(Some(3004));
+    let _server = TestServer::start(Some(3004), Some("expectations_lua.json"));
     wait_for_server("http://localhost:3004").await;
 
     let client = reqwest::Client::new();
@@ -482,7 +487,7 @@ async fn test_mock_with_lua_script() -> Result<(), Box<dyn std::error::Error>> {
 
 #[tokio::test]
 async fn test_templated_body_array() -> Result<(), Box<dyn std::error::Error>> {
-    let _server = TestServer::start(Some(3005));
+    let _server = TestServer::start(Some(3005), Some("expectations_templated_array.json"));
     wait_for_server("http://localhost:3005").await;
 
     let client = reqwest::Client::new();
@@ -522,6 +527,53 @@ async fn test_templated_body_array() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(body["second_id"], "102");
     assert_eq!(body["deep"], "tag1");
     assert_eq!(body["path_0"], "array-test");
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_metrics() -> Result<(), Box<dyn std::error::Error>> {
+    let _server = TestServer::start(Some(3006), Some("expectations_metrics.json"));
+    wait_for_server("http://localhost:3006").await;
+
+    let client = reqwest::Client::new();
+    let base_url = "http://localhost:3006";
+
+    // 1. Create a mock
+    client
+        .post(format!("{}/_admin/mocks", base_url))
+        .json(&json!({
+            "id": 888,
+            "condition": { "method": "GET", "path": "/metrics-test" },
+            "response": { "status_code": 200, "body": "ok" }
+        }))
+        .send()
+        .await?;
+
+    // 2. Call the mock
+    client
+        .get(format!("{}/metrics-test", base_url))
+        .send()
+        .await?;
+
+    // 3. Call a non-existent path unsing a method
+    client.get(format!("{}/no-match", base_url)).send().await?;
+
+    // 4. Verify metrics
+    let res = client
+        .get(format!("{}/_admin/metrics", base_url))
+        .send()
+        .await?;
+    assert_eq!(res.status(), 200);
+    let body = res.text().await?;
+
+    assert!(body.contains("mimicrab_requests_total{matched=\"true\",path=\"/metrics-test\"} 1"));
+    assert!(body.contains("mimicrab_requests_total{matched=\"false\",path=\"/no-match\"} 1"));
+    assert!(body.contains("mimicrab_request_duration_seconds_bucket{path=\"/metrics-test\""));
+
+    // Check process metrics exist
+    assert!(body.contains("process_cpu_seconds_total"));
+    assert!(body.contains("process_resident_memory_bytes"));
 
     Ok(())
 }

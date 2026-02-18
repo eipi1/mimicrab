@@ -1,5 +1,6 @@
 mod kubernetes;
 mod matcher;
+mod metrics;
 mod models;
 mod templating;
 
@@ -35,6 +36,9 @@ use tracing_subscriber::EnvFilter;
 struct Args {
     #[arg(short, long, default_value_t = 3000)]
     port: u16,
+
+    #[arg(short, long, default_value = "expectations.json")]
+    expectations: String,
 }
 #[derive(Clone, Debug, serde::Serialize)]
 struct LogEntry {
@@ -53,6 +57,7 @@ struct AppState {
     config_map_name: String,
     namespace: String,
     proxy_client: reqwest::Client,
+    expectations_path: String,
 }
 
 #[derive(RustEmbed)]
@@ -67,7 +72,11 @@ async fn main() {
         .with_env_filter(EnvFilter::from_default_env().add_directive(tracing::Level::INFO.into()))
         .init();
 
-    let expectations_path = "expectations.json";
+    metrics::register_process_metrics();
+
+    let args = Args::parse();
+    let port = args.port;
+    let expectations_path = args.expectations.clone();
     let (log_tx, _) = broadcast::channel(100);
 
     let provider = rustls::crypto::ring::default_provider();
@@ -94,15 +103,12 @@ async fn main() {
     let initial_expectations = if let Some(ref client) = kube_client {
         kubernetes::load_from_configmap(client, &config_map_name, &namespace)
             .await
-            .unwrap_or_else(|_| load_expectations(expectations_path))
+            .unwrap_or_else(|_| load_expectations(&expectations_path))
     } else {
-        load_expectations(expectations_path)
+        load_expectations(&expectations_path)
     };
 
     let expectations = Arc::new(ArcSwap::from_pointee(initial_expectations));
-
-    let args = Args::parse();
-    let port = args.port;
 
     let proxy_client = reqwest::Client::builder()
         .user_agent("mimicrab/0.1.0")
@@ -116,6 +122,7 @@ async fn main() {
         config_map_name,
         namespace,
         proxy_client,
+        expectations_path,
     });
 
     if let Some(ref client) = state.kube_client {
@@ -133,7 +140,8 @@ async fn main() {
         .route("/mocks/{id}", put(update_mock).delete(delete_mock))
         .route("/logs/stream", get(stream_logs))
         .route("/export", get(export_mocks))
-        .route("/import", post(import_mocks));
+        .route("/import", post(import_mocks))
+        .route("/metrics", get(metrics_handler));
 
     let app = Router::new()
         .nest("/_admin", admin_router)
@@ -204,7 +212,7 @@ async fn add_mock(
         kubernetes::sync_to_configmap(client, &state.namespace, &state.config_map_name, &mocks)
             .await;
     } else {
-        save_expectations("expectations.json", &mocks);
+        save_expectations(&state.expectations_path, &mocks);
     }
 
     (StatusCode::CREATED, Json(new_mock))
@@ -224,7 +232,7 @@ async fn update_mock(
             kubernetes::sync_to_configmap(client, &state.namespace, &state.config_map_name, &mocks)
                 .await;
         } else {
-            save_expectations("expectations.json", &mocks);
+            save_expectations(&state.expectations_path, &mocks);
         }
         StatusCode::OK
     } else {
@@ -242,7 +250,7 @@ async fn delete_mock(State(state): State<Arc<AppState>>, AxPath(id): AxPath<u64>
             kubernetes::sync_to_configmap(client, &state.namespace, &state.config_map_name, &mocks)
                 .await;
         } else {
-            save_expectations("expectations.json", &mocks);
+            save_expectations(&state.expectations_path, &mocks);
         }
         StatusCode::NO_CONTENT
     } else {
@@ -264,7 +272,7 @@ async fn import_mocks(
         kubernetes::sync_to_configmap(client, &state.namespace, &state.config_map_name, &new_mocks)
             .await;
     } else {
-        save_expectations("expectations.json", &new_mocks);
+        save_expectations(&state.expectations_path, &new_mocks);
     }
     StatusCode::OK
 }
@@ -424,6 +432,7 @@ async fn execute_lua_script(
 }
 
 async fn handle_request(State(state): State<Arc<AppState>>, req: Request) -> Response {
+    let start = std::time::Instant::now();
     let (parts, body) = req.into_parts();
     let path = parts.uri.path();
     let method = &parts.method;
@@ -442,6 +451,16 @@ async fn handle_request(State(state): State<Arc<AppState>>, req: Request) -> Res
     let matched = expectations
         .iter()
         .find(|exp| matcher::matches(method, path, headers, &body_json, &exp.condition));
+
+    if let Some(_exp) = matched {
+        metrics::REQUEST_COUNTER
+            .with_label_values(&["true", path])
+            .inc();
+    } else {
+        metrics::REQUEST_COUNTER
+            .with_label_values(&["false", path])
+            .inc();
+    }
 
     let log_entry = LogEntry {
         timestamp: chrono::Utc::now().to_rfc3339(),
@@ -515,6 +534,10 @@ async fn handle_request(State(state): State<Arc<AppState>>, req: Request) -> Res
 
         let response = response_builder.body(response_body).unwrap();
         tracing::info!("Returning matched response: status={}", response.status());
+
+        metrics::REQUEST_DURATION
+            .with_label_values(&[path])
+            .observe(start.elapsed().as_secs_f64());
         response
     } else {
         tracing::warn!("No match found for {} {}", method, path);
@@ -740,4 +763,18 @@ fn handle_bson_response(
         return Some(Body::from(bytes));
     }
     None
+}
+
+async fn metrics_handler() -> impl IntoResponse {
+    use prometheus::Encoder;
+    let encoder = prometheus::TextEncoder::new();
+    let mut buffer = Vec::new();
+    let metric_families = metrics::REGISTRY.gather();
+    encoder.encode(&metric_families, &mut buffer).unwrap();
+
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, encoder.format_type())
+        .body(Body::from(buffer))
+        .unwrap()
 }

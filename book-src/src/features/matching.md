@@ -10,7 +10,17 @@ A request must satisfy all defined conditions in an expectation to match.
 Matches the exact HTTP method (e.g., `GET`, `POST`).
 
 ### Path
-Matches the exact request path (e.g., `/api/v1/users`).
+Mimicrab supports flexible path matching, including static paths, parameterized segments, and wildcards.
+
+- **Static Match**: Matches the exact path.
+  - Example: `/api/v1/users`
+- **Parameterized Match**: Use `:name` to capture path segments.
+  - Example: `/books/:id/author` matches `/books/123/author` and `/books/abc/author`.
+  - Captured segments can be used in [Templating](../advanced/templating.md) via `{{path[index]}}`.
+- **Wildcard Match**: Use `*` to match any characters.
+  - **Prefix Wildcard**: `*/books` matches `/path/to/books`.
+  - **Suffix Wildcard**: `/api/*` matches `/api/v1/users` and `/api/v2/posts`.
+  - **Middle/Segment Wildcard**: `/static/*/main.js` matches `/static/v1/main.js`.
 
 ### Headers
 Matches if the request contains all specified headers with their corresponding values.
