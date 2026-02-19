@@ -509,7 +509,7 @@ async fn test_templated_body_array() -> Result<(), Box<dyn std::error::Error>> {
                 "status_code": 200,
                 "body": {
                     "first_name": "{{body[0].name}}",
-                    "second_id": "{{body[1].id}}",
+                    "second_id": "{{body[1].id:string}}",
                     "deep": "{{body[1].tags[0]}}",
                     "path_0": "{{path[0]}}"
                 }

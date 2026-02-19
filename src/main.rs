@@ -671,7 +671,7 @@ async fn apply_jitter(
 fn build_response_body(
     res_config: &models::ResponseConfig,
     path: &str,
-    body_json: &Option<Value>,
+    req_body: &Option<Value>,
     request_headers: &header::HeaderMap,
     response_builder: &mut axum::http::response::Builder,
 ) -> Body {
@@ -679,9 +679,10 @@ fn build_response_body(
         return Body::empty();
     };
 
-    let body_str = serde_json::to_string(res_body).unwrap();
     let path_segments: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
-    let resolved_body = templating::resolve_template(&body_str, &path_segments, body_json);
+    let resolved_val =
+        templating::resolve_template_value(res_body.clone(), &path_segments, req_body);
+    let resolved_body = serde_json::to_string(&resolved_val).unwrap();
 
     // Handle Non-JSON (Text/HTML) body type
     if let Some(ref b_type) = res_config.body_type

@@ -2,9 +2,10 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 use serde_json::Value;
 
-static PATH_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\{\{path\[(\d+)\]\}\}").unwrap());
+static PATH_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"\{\{path\[(\d+)\](?::(string))?\}\}").unwrap());
 static BODY_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"\{\{body([\.\[][a-zA-Z0-9\._\[\]]+)\}\}").unwrap());
+    Lazy::new(|| Regex::new(r"\{\{body([\.\[][a-zA-Z0-9\._\[\]]+)(?::(string))?\}\}").unwrap());
 
 pub fn resolve_template(template: &str, path_segments: &[&str], body: &Option<Value>) -> String {
     let mut resolved = template.to_string();
@@ -15,7 +16,7 @@ pub fn resolve_template(template: &str, path_segments: &[&str], body: &Option<Va
             let index: usize = caps[1].parse().unwrap_or(999);
             let val = path_segments.get(index).cloned().unwrap_or("null");
             tracing::trace!("Template resolved path[{}]: {}", index, val);
-            val
+            val.to_string()
         })
         .to_string();
 
@@ -43,6 +44,78 @@ pub fn resolve_template(template: &str, path_segments: &[&str], body: &Option<Va
 
     tracing::trace!("Final resolved template: {}", resolved);
     resolved
+}
+
+pub fn resolve_template_value(
+    res_body: Value,
+    path_segments: &[&str],
+    req_body: &Option<Value>,
+) -> Value {
+    match res_body {
+        Value::String(s) => {
+            // Check if it's a single template marker
+            if let Some(caps) = PATH_RE.captures(&s)
+                && caps[0] == s
+            {
+                let index: usize = caps[1].parse().unwrap_or(999);
+                let force_string = caps.get(2).is_some();
+                let raw_val = path_segments.get(index).cloned().unwrap_or("null");
+                if force_string {
+                    return Value::String(raw_val.to_string());
+                }
+                return attempt_parse_string(raw_val);
+            }
+            if let Some(caps) = BODY_RE.captures(&s)
+                && caps[0] == s
+            {
+                let path = &caps[1];
+                let force_string = caps.get(2).is_some();
+                if let Some(body_val) = req_body
+                    && let Some(v) = get_value_by_path(body_val, path)
+                {
+                    if force_string {
+                        return Value::String(match v {
+                            Value::String(s) => s.clone(),
+                            _ => v.to_string(),
+                        });
+                    }
+                    return v.clone();
+                }
+                return Value::Null;
+            }
+            // Fallback to string-based partial resolution
+            Value::String(resolve_template(&s, path_segments, req_body))
+        }
+        Value::Array(arr) => Value::Array(
+            arr.into_iter()
+                .map(|v| resolve_template_value(v, path_segments, req_body))
+                .collect(),
+        ),
+        Value::Object(obj) => Value::Object(
+            obj.into_iter()
+                .map(|(k, v)| (k, resolve_template_value(v, path_segments, req_body)))
+                .collect(),
+        ),
+        _ => res_body,
+    }
+}
+
+fn attempt_parse_string(s: &str) -> Value {
+    if s == "true" {
+        return Value::Bool(true);
+    }
+    if s == "false" {
+        return Value::Bool(false);
+    }
+    if let Ok(i) = s.parse::<i64>() {
+        return Value::Number(i.into());
+    }
+    if let Ok(f) = s.parse::<f64>()
+        && let Some(n) = serde_json::Number::from_f64(f)
+    {
+        return Value::Number(n);
+    }
+    Value::String(s.to_string())
 }
 
 fn get_value_by_path<'a>(body: &'a Value, path: &str) -> Option<&'a Value> {

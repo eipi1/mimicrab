@@ -2,6 +2,8 @@
 
 Mimicrab is a high-performance, developer-friendly mock server built in Rust. It allows you to quickly create, manage, and test HTTP mocks with advanced features like request matching, dynamic Lua scripting, and response templating.
 
+![Mimicrab UI Dashboard](./assets/ui-preview.png)
+
 ## Why Mimicrab?
 
 - **Easy to use**: Intuitive dashboard for managing mocks.

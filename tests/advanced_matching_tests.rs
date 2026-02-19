@@ -73,7 +73,7 @@ async fn test_parameterized_path_matching() -> Result<(), Box<dyn std::error::Er
     client.post(&admin_url).json(&json!({
         "id": 1,
         "condition": { "method": "GET", "path": "/books/:id/author" },
-        "response": { "status_code": 200, "body": { "matched": "parameter", "id": "{{path[1]}}" } }
+        "response": { "status_code": 200, "body": { "matched": "parameter", "id": "{{path[1]:string}}" } }
     })).send().await?;
 
     // 2. Verify match
