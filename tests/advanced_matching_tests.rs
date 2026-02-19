@@ -5,6 +5,7 @@ use tokio::time::sleep;
 
 struct TestServer {
     child: Child,
+    expectations_path: String,
 }
 
 impl TestServer {
@@ -20,7 +21,10 @@ impl TestServer {
             .spawn()
             .expect("Failed to start mimicrab server");
 
-        Self { child }
+        Self {
+            child,
+            expectations_path: expectations_path.to_string(),
+        }
     }
 }
 
@@ -28,6 +32,7 @@ impl Drop for TestServer {
     fn drop(&mut self) {
         let _ = self.child.kill();
         let _ = self.child.wait();
+        let _ = std::fs::remove_file(&self.expectations_path);
     }
 }
 
