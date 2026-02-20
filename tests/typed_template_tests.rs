@@ -156,5 +156,41 @@ async fn test_typed_templates() -> Result<(), Box<dyn std::error::Error>> {
     assert!(body["flag_str"].is_string());
     assert_eq!(body["flag_str"], "false");
 
+    // 4. Explicit conversions (String to Int/Bool)
+    client
+        .post(&admin_url)
+        .json(&json!({
+            "id": 4,
+            "condition": { "method": "POST", "path": "/convert-types/:val" },
+            "response": {
+                "status_code": 200,
+                "body": {
+                    "id_as_int": "{{body.id_str:int}}",
+                    "active_as_bool": "{{body.active_str:bool}}",
+                    "path_idx_as_int": "{{path[1]:int}}"
+                }
+            }
+        }))
+        .send()
+        .await?;
+
+    let convert_payload = json!({
+        "id_str": "999",
+        "active_str": "true"
+    });
+    // Use /convert/123 to get "123" at path[1]
+    let res = client
+        .post(format!("{}/convert-types/123", base_url))
+        .json(&convert_payload)
+        .send()
+        .await?;
+    let body: serde_json::Value = res.json().await?;
+    assert!(body["id_as_int"].is_number());
+    assert_eq!(body["id_as_int"], 999);
+    assert!(body["active_as_bool"].is_boolean());
+    assert_eq!(body["active_as_bool"], true);
+    assert!(body["path_idx_as_int"].is_number());
+    assert_eq!(body["path_idx_as_int"], 123);
+
     Ok(())
 }

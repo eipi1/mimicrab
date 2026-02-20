@@ -3,9 +3,9 @@ use regex::Regex;
 use serde_json::Value;
 
 static PATH_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"\{\{path\[(\d+)\](?::(string))?\}\}").unwrap());
+    Lazy::new(|| Regex::new(r"\{\{path\[(\d+)\](?::([a-z]+))?\}\}").unwrap());
 static BODY_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"\{\{body([\.\[][a-zA-Z0-9\._\[\]]+)(?::(string))?\}\}").unwrap());
+    Lazy::new(|| Regex::new(r"\{\{body([\.\[][a-zA-Z0-9\._\[\]]+)(?::([a-z]+))?\}\}").unwrap());
 
 pub fn resolve_template(template: &str, path_segments: &[&str], body: &Option<Value>) -> String {
     let mut resolved = template.to_string();
@@ -58,28 +58,20 @@ pub fn resolve_template_value(
                 && caps[0] == s
             {
                 let index: usize = caps[1].parse().unwrap_or(999);
-                let force_string = caps.get(2).is_some();
+                let filter = caps.get(2).map(|m| m.as_str());
                 let raw_val = path_segments.get(index).cloned().unwrap_or("null");
-                if force_string {
-                    return Value::String(raw_val.to_string());
-                }
-                return attempt_parse_string(raw_val);
+
+                return apply_filter(attempt_parse_string(raw_val), filter);
             }
             if let Some(caps) = BODY_RE.captures(&s)
                 && caps[0] == s
             {
                 let path = &caps[1];
-                let force_string = caps.get(2).is_some();
+                let filter = caps.get(2).map(|m| m.as_str());
                 if let Some(body_val) = req_body
                     && let Some(v) = get_value_by_path(body_val, path)
                 {
-                    if force_string {
-                        return Value::String(match v {
-                            Value::String(s) => s.clone(),
-                            _ => v.to_string(),
-                        });
-                    }
-                    return v.clone();
+                    return apply_filter(v.clone(), filter);
                 }
                 return Value::Null;
             }
@@ -97,6 +89,44 @@ pub fn resolve_template_value(
                 .collect(),
         ),
         _ => res_body,
+    }
+}
+
+fn apply_filter(val: Value, filter: Option<&str>) -> Value {
+    match filter {
+        Some("string") => Value::String(match val {
+            Value::String(s) => s,
+            _ => val.to_string(),
+        }),
+        Some("int") | Some("number") => match val {
+            Value::Number(_) => val,
+            Value::String(ref s) => {
+                if let Ok(i) = s.parse::<i64>() {
+                    Value::Number(i.into())
+                } else if let Ok(f) = s.parse::<f64>() {
+                    serde_json::Number::from_f64(f)
+                        .map(Value::Number)
+                        .unwrap_or(val)
+                } else {
+                    val
+                }
+            }
+            _ => val,
+        },
+        Some("bool") | Some("boolean") => match val {
+            Value::Bool(_) => val,
+            Value::String(ref s) => {
+                if s == "true" {
+                    Value::Bool(true)
+                } else if s == "false" {
+                    Value::Bool(false)
+                } else {
+                    val
+                }
+            }
+            _ => val,
+        },
+        _ => val,
     }
 }
 

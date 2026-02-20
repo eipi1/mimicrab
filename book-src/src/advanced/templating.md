@@ -42,6 +42,10 @@ If you want to explicitly force a typed value into a string, use the `:string` f
 |--------|-------------|
 | `{{path[n]:string}}` | Forces path segment to stay as a string |
 | `{{body.field:string}}` | Converts number/boolean body field to string |
+| `{{path[n]:int}}` | Parses path segment as an integer |
+| `{{body.field:int}}` | Parses string body field as an integer |
+| `{{path[n]:bool}}` | Parses path segment as a boolean (`true`/`false`) |
+| `{{body.field:bool}}` | Parses string body field as a boolean |
 
 **Example**:
 `{"id_str": "{{path[1]:string}}"}` resolves to `{"id_str": "123"}`.
